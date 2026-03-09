@@ -301,6 +301,26 @@ export default function LandingPage() {
         </Link>
       </section>
 
+      {/*
+        TODO: Promo code feature
+        Give new users a free month on the Basic plan via a promo code
+        (e.g. distributed at conferences, to colleagues, on social media).
+
+        Implementation via Stripe:
+        1. Create a Stripe Coupon: 100% off, duration = 1 month, applies to Basic plan only.
+        2. Generate Promotion Codes from that coupon (e.g. WELCOME, PROF50, CANVAS24).
+           Each code can be single-use or multi-use, with optional expiry.
+        3. At checkout, add a "Have a promo code?" input field on the Stripe checkout session.
+           Pass the code via `discounts: [{ promotion_code: <id> }]` on the
+           Stripe Checkout Session or Subscription creation API call.
+        4. Stripe validates the code, applies the discount, and handles billing automatically.
+           No custom validation logic needed on our end.
+
+        UI: Add a small "Have a promo code?" link below the pricing cards that expands
+        an input. On submit, redirect to /auth/signin?plan=basic&promo=CODE so the
+        checkout flow can pick it up post-sign-in.
+      */}
+
       {/* ── Pricing ─────────────────────────────────────────────────────── */}
       <section id="pricing" className={styles.pricing}>
         <h2 className={styles.sectionTitle}>Straightforward, honest pricing</h2>
