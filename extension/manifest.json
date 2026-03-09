@@ -17,6 +17,10 @@
     "https://katana-woad.vercel.app/*"
   ],
 
+  "externally_connectable": {
+    "matches": ["https://katana-woad.vercel.app/*"]
+  },
+
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"
