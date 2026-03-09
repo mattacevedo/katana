@@ -1,0 +1,37 @@
+/* content/content.css — styles for the injected Katana toolbar button */
+
+#katana-grade-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  cursor: pointer;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+  margin: 4px 6px;
+  vertical-align: middle;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+#katana-grade-btn:hover {
+  background-color: #1d4ed8;
+}
+
+#katana-grade-btn:active {
+  background-color: #1e40af;
+  transform: translateY(1px);
+}
+
+#katana-grade-btn:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+  opacity: 0.8;
+}

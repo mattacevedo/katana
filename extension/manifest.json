@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Katana",
+  "version": "2.0.0",
+  "description": "AI-powered grading assistant for Canvas LMS SpeedGrader",
+
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "sidePanel",
+    "identity"
+  ],
+
+  "host_permissions": [
+    "*://*.instructure.com/*",
+    "https://app.katana.app/*",
+    "https://api.katana.app/*"
+  ],
+
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["*://*.instructure.com/courses/*/gradebook/speed_grader*"],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+
+  "action": {
+    "default_title": "Open Katana",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

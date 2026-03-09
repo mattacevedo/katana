@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Katana</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────── -->
+  <header class="katana-header">
+    <div class="katana-logo">
+      <img src="../icons/icon32.png" alt="Katana" width="22" height="22">
+      <div class="katana-logo-text-group">
+        <span class="katana-logo-text">Katana</span>
+        <span class="katana-tagline">Slice through your grading workload</span>
+      </div>
+    </div>
+    <nav class="katana-tabs" role="tablist">
+      <button class="tab-btn active" data-tab="grade" role="tab" aria-selected="true">Grade</button>
+      <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false">Settings</button>
+    </nav>
+  </header>
+
+  <!-- ── Grade Tab ──────────────────────────────────────────────────── -->
+  <section id="tab-grade" class="tab-content" role="tabpanel">
+
+    <!-- State: not signed in -->
+    <div id="state-signed-out" class="state hidden">
+      <div class="empty-state">
+        <div class="empty-icon">🔒</div>
+        <p class="empty-title">Sign in to Katana</p>
+        <p class="empty-desc">Create a free account or sign in to start AI-assisted grading.</p>
+        <button id="btn-signin" class="btn-primary" style="margin-top: 16px;">
+          <span class="btn-icon">→</span>
+          Sign In
+        </button>
+      </div>
+    </div>
+
+    <!-- State: not on SpeedGrader -->
+    <div id="state-wrong-page" class="state hidden">
+      <div class="empty-state">
+        <div class="empty-icon">🎓</div>
+        <p class="empty-title">Not on SpeedGrader</p>
+        <p class="empty-desc">Navigate to a Canvas SpeedGrader submission to use Katana.</p>
+      </div>
+    </div>
+
+    <!-- State: idle — ready to grade -->
+    <div id="state-idle" class="state hidden">
+      <div class="student-card">
+        <div class="student-meta">
+          <span class="label-small">Current Student</span>
+          <span id="student-name" class="student-name">Loading…</span>
+          <span id="assignment-name" class="assignment-name"></span>
+        </div>
+      </div>
+      <div class="action-area">
+        <button id="btn-grade" class="btn-primary">
+          <span class="btn-icon">⚡</span>
+          Grade This Submission
+        </button>
+        <p class="hint-text">AI will analyze the submission and fill in Canvas automatically.</p>
+      </div>
+    </div>
+
+    <!-- State: loading -->
+    <div id="state-loading" class="state hidden">
+      <div class="loading-area">
+        <div class="spinner" aria-label="Loading"></div>
+        <p class="loading-text">Analyzing submission…</p>
+        <p class="loading-sub">Katana is reading the submission and rubric.</p>
+      </div>
+    </div>
+
+    <!-- State: results -->
+    <div id="state-results" class="state hidden">
+      <div class="results-header">
+        <span class="results-label">Grading Complete</span>
+        <span id="result-student-name" class="results-student"></span>
+      </div>
+
+      <div class="result-card">
+        <div class="result-grade-row">
+          <span class="result-grade-label">Grade</span>
+          <span id="result-grade" class="result-grade-value"></span>
+        </div>
+        <div class="result-confidence-row">
+          <span id="result-confidence-badge" class="confidence-badge"></span>
+        </div>
+      </div>
+
+      <div id="confidence-warning" class="confidence-warning hidden">
+        <span class="confidence-warning-icon">⚠️</span>
+        <span id="confidence-warning-text"></span>
+      </div>
+
+      <div class="result-card">
+        <div class="result-section-label">Feedback (filled into Canvas)</div>
+        <p id="result-feedback" class="result-feedback-text"></p>
+        <button id="btn-expand-feedback" class="btn-link">Show full feedback</button>
+      </div>
+
+      <details class="rationale-card">
+        <summary class="rationale-summary">Grading Rationale <span class="summary-hint">(internal)</span></summary>
+        <p id="result-rationale" class="rationale-text"></p>
+      </details>
+
+      <div id="apply-warning" class="apply-warning hidden">
+        <span class="apply-warning-icon">⚠️</span>
+        <span id="apply-warning-text"></span>
+      </div>
+
+      <div class="action-hint-box">
+        <span class="action-hint-icon">✏️</span>
+        <span>Review and edit in Canvas, then click Submit.</span>
+      </div>
+
+      <button id="btn-regrade" class="btn-secondary">Re-grade Submission</button>
+    </div>
+
+    <!-- State: error -->
+    <div id="state-error" class="state hidden">
+      <div class="error-card">
+        <div class="error-icon-wrap">!</div>
+        <p id="error-message" class="error-message"></p>
+      </div>
+      <button id="btn-retry" class="btn-secondary">Retry</button>
+      <!-- Show sign-in button if error is auth-related -->
+      <button id="btn-error-signin" class="btn-secondary hidden">Sign In Again</button>
+    </div>
+
+  </section>
+
+  <!-- ── Settings Tab ───────────────────────────────────────────────── -->
+  <section id="tab-settings" class="tab-content hidden" role="tabpanel">
+    <div class="settings-form">
+
+      <!-- Account -->
+      <div class="account-card" id="account-card-signed-in">
+        <div class="account-info">
+          <span class="account-email" id="account-email"></span>
+          <span class="account-plan" id="account-plan"></span>
+        </div>
+        <button id="btn-signout" class="btn-signout">Sign Out</button>
+      </div>
+      <div class="account-card account-card-out" id="account-card-signed-out">
+        <p class="account-signed-out-text">Not signed in.</p>
+        <button id="btn-signin-settings" class="btn-primary btn-small">Sign In</button>
+      </div>
+
+      <hr class="settings-divider">
+
+      <div class="form-group">
+        <label class="form-label" for="model-select">Model</label>
+        <select id="model-select" class="form-select">
+          <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — Recommended</option>
+          <option value="claude-opus-4-6">Claude Opus 4.6 — More thorough, slower</option>
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — Fastest, lightest</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="tone-select">Feedback Tone</label>
+        <select id="tone-select" class="form-select">
+          <option value="professional">Professional</option>
+          <option value="casual">Casual</option>
+          <option value="encouraging">Encouraging</option>
+          <option value="socratic">Socratic</option>
+          <option value="skeptical">Skeptical</option>
+          <option value="samurai">Samurai</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="feedback-length">Feedback Length</label>
+        <div class="slider-row">
+          <input type="range" id="feedback-length" class="form-slider" min="1" max="5" step="1" value="3">
+          <span id="feedback-length-label" class="slider-label">Standard</span>
+        </div>
+        <div class="slider-ticks slider-ticks-offset">
+          <span>Short</span><span>Brief</span><span>Standard</span><span>Detailed</span><span>Comprehensive</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="strictness">Grading Strictness</label>
+        <div class="slider-row">
+          <input type="range" id="strictness" class="form-slider" min="1" max="5" step="1" value="3">
+          <span id="strictness-label" class="slider-label">Balanced</span>
+        </div>
+        <div class="slider-ticks slider-ticks-offset">
+          <span>Lenient</span><span>Generous</span><span>Balanced</span><span>Firm</span><span>Strict</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-check">
+          <input type="checkbox" id="greet-first-name" class="form-checkbox">
+          <span class="form-check-label">Greet student by name</span>
+        </label>
+        <p class="form-hint">When checked, feedback opens with the student's first name.</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-check">
+          <input type="checkbox" id="late-deduction" class="form-checkbox">
+          <span class="form-check-label">Deduct for late submissions</span>
+        </label>
+        <div id="late-deduction-controls" class="late-row hidden">
+          <input type="number" id="late-deduction-per-day" class="form-input form-input-narrow" min="1" max="100" value="10">
+          <span class="late-row-label">% deducted per day late</span>
+        </div>
+        <p class="form-hint">Checks submission time against the due date and reduces the grade accordingly.</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="custom-instructions">Custom Instructions</label>
+        <textarea
+          id="custom-instructions"
+          class="form-textarea"
+          rows="6"
+          placeholder="E.g., 'This is a 200-level writing course. Always comment on thesis clarity and citation quality.'"
+        ></textarea>
+        <p class="form-hint">Added to every grading request. Describe course level, grading priorities, or specific criteria.</p>
+      </div>
+
+      <button id="btn-save-settings" class="btn-primary">Save Settings</button>
+      <p id="settings-status" class="settings-status hidden"></p>
+
+    </div>
+
+    <div class="settings-footer">
+      <p>Katana v2.0 — <a href="https://app.katana.app" target="_blank" rel="noopener">app.katana.app</a></p>
+    </div>
+  </section>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
