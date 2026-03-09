@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '../../../lib/supabase/server';
+import { createAdminClient } from '../../../lib/supabase/admin';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -24,7 +24,9 @@ export async function POST(req: NextRequest) {
   }
 
   const token = authHeader.slice(7);
-  const supabase = await createClient();
+  // Use the admin client to validate the Bearer token from the extension.
+  // The extension doesn't send cookies — it sends the session access_token directly.
+  const supabase = createAdminClient();
 
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !user) {
