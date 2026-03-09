@@ -12,8 +12,9 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // ─── Quota limits per plan ────────────────────────────────────────────────
 const PLAN_LIMITS: Record<string, number> = {
   free: 50,
-  pro: Infinity,
-  department: Infinity,
+  basic: 200,
+  super: 1000,
+  shogun: 2500,
 };
 
 export async function POST(req: NextRequest) {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
 
   if (used >= limit) {
     return json({
-      error: `You've used all ${limit} grades for this period. Upgrade to Pro for unlimited grading.`
+      error: `You've used all ${limit} grades for this period. Upgrade your plan at gradewithkatana.com to continue grading.`
     }, 402);
   }
 

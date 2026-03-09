@@ -4,12 +4,22 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '../../../lib/supabase/client';
 import Link from 'next/link';
 import styles from '../auth.module.css';
 
-export default function SignInPage() {
+const URL_ERROR_MESSAGES: Record<string, string> = {
+  missing_code: 'The sign-in link was invalid or has already been used. Please request a new one.',
+  invalid_code: 'The sign-in link could not be verified. It may have expired. Please request a new one.',
+};
+
+function SignInContent() {
+  const searchParams = useSearchParams();
+  const urlError = searchParams.get('error');
+  const urlErrorMessage = urlError ? (URL_ERROR_MESSAGES[urlError] || 'Something went wrong. Please try again.') : '';
+
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +35,7 @@ export default function SignInPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?source=extension`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
 
@@ -62,6 +72,8 @@ export default function SignInPage() {
         <h1 className={styles.title}>Sign in</h1>
         <p className={styles.subtitle}>We&apos;ll email you a magic link — no password needed.</p>
 
+        {urlErrorMessage && <p className={styles.error}>{urlErrorMessage}</p>}
+
         <form onSubmit={handleSubmit} className={styles.form}>
           <input
             type="email"
@@ -83,5 +95,13 @@ export default function SignInPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInContent />
+    </Suspense>
   );
 }

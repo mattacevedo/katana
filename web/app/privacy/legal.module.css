@@ -1,0 +1,33 @@
+/* Shared styles for legal pages (Privacy, Terms) and FYI */
+
+.page { min-height: 100vh; display: flex; flex-direction: column; background: var(--white); }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; border-bottom: 1px solid var(--border); }
+.logo { font-size: 18px; font-weight: 700; color: var(--navy); }
+.backLink { font-size: 14px; color: var(--blue); }
+.backLink:hover { text-decoration: underline; }
+
+.main { max-width: 740px; margin: 0 auto; padding: 48px 40px 80px; width: 100%; flex: 1; }
+
+.title { font-size: clamp(24px, 4vw, 38px); font-weight: 800; color: var(--navy); margin-bottom: 8px; }
+.meta { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+
+.highlight { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px 20px; font-size: 14px; color: var(--navy); line-height: 1.7; margin-bottom: 36px; }
+
+.section { margin-bottom: 36px; }
+.section h2 { font-size: 20px; font-weight: 700; color: var(--navy); margin-bottom: 10px; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
+.section h3 { font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px; margin-top: 16px; }
+.section p { font-size: 15px; color: var(--text); line-height: 1.8; margin-bottom: 12px; }
+.section ul { font-size: 15px; color: var(--text); line-height: 1.8; padding-left: 20px; margin-bottom: 12px; }
+.section ul li { margin-bottom: 6px; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }
+.table th { background: #f3f4f6; text-align: left; padding: 8px 12px; font-weight: 700; color: var(--navy); border: 1px solid #e5e7eb; }
+.table td { padding: 8px 12px; border: 1px solid #e5e7eb; color: var(--text); vertical-align: top; }
+.table tr:nth-child(even) td { background: #f9fafb; }
+
+/* FYI page specific */
+.fyiBody { font-size: 16px; color: var(--text); line-height: 1.8; background: #f9fafb; border: 1px dashed var(--border); border-radius: 10px; padding: 32px; text-align: center; }
+
+.footer { padding: 24px 40px; border-top: 1px solid var(--border); display: flex; gap: 12px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.footer a { color: var(--blue); }

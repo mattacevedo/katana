@@ -6,6 +6,20 @@ import { createClient } from '../../lib/supabase/server';
 import Link from 'next/link';
 import styles from './dashboard.module.css';
 
+const PLAN_LIMITS: Record<string, number> = {
+  free: 50,
+  basic: 200,
+  super: 1000,
+  shogun: 2500,
+};
+
+const PLAN_DISPLAY: Record<string, string> = {
+  free: 'Free',
+  basic: 'Basic',
+  super: 'Super',
+  shogun: 'Shogun',
+};
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -20,7 +34,7 @@ export default async function DashboardPage() {
 
   const plan = profile?.plan || 'free';
   const used = profile?.grades_this_period || 0;
-  const limit = plan === 'free' ? 50 : null;
+  const limit = PLAN_LIMITS[plan] ?? 50;
   const periodStart = profile?.period_start
     ? new Date(profile.period_start).toLocaleDateString()
     : 'N/A';
@@ -41,32 +55,33 @@ export default async function DashboardPage() {
         <div className={styles.cards}>
           <div className={styles.card}>
             <div className={styles.cardLabel}>Plan</div>
-            <div className={styles.cardValue}>{plan.charAt(0).toUpperCase() + plan.slice(1)}</div>
+            <div className={styles.cardValue}>{PLAN_DISPLAY[plan] ?? plan}</div>
             {plan === 'free' && (
-              <Link href="/billing" className={styles.upgradeLink}>Upgrade to Pro →</Link>
+              <Link href="/#pricing" className={styles.upgradeLink}>View upgrade options →</Link>
+            )}
+            {plan !== 'free' && plan !== 'shogun' && (
+              <Link href="/#pricing" className={styles.upgradeLink}>Upgrade plan →</Link>
             )}
           </div>
 
           <div className={styles.card}>
             <div className={styles.cardLabel}>Grades Used</div>
             <div className={styles.cardValue}>
-              {used}{limit !== null ? ` / ${limit}` : ''}
+              {used} / {limit}
             </div>
             <div className={styles.cardSub}>Since {periodStart}</div>
-            {limit !== null && (
-              <div className={styles.progressBar}>
-                <div
-                  className={styles.progressFill}
-                  style={{ width: `${Math.min(100, (used / limit) * 100)}%` }}
-                />
-              </div>
-            )}
+            <div className={styles.progressBar}>
+              <div
+                className={styles.progressFill}
+                style={{ width: `${Math.min(100, (used / limit) * 100)}%` }}
+              />
+            </div>
           </div>
 
           <div className={styles.card}>
-            <div className={styles.cardLabel}>Extension</div>
+            <div className={styles.cardLabel}>Chrome Extension</div>
             <div className={styles.cardValue} style={{ fontSize: 14, marginTop: 4 }}>
-              Install the Chrome extension from the Web Store, then sign in from the side panel.
+              Install the Katana Chrome extension, then sign in from the side panel to start grading.
             </div>
             <a
               href="https://chrome.google.com/webstore/detail/katana/PLACEHOLDER"
