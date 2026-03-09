@@ -19,6 +19,31 @@ chrome.action.onClicked.addListener(tab => {
   chrome.sidePanel.open({ tabId: tab.id });
 });
 
+// ─── External messages from the Katana web app ──────────────────────────────
+// Called by the auth/callback page after the magic link is clicked.
+// chrome.runtime.sendMessage(extensionId, ...) from a web page fires onMessageExternal,
+// NOT onMessage — so we need a separate listener here.
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  if (message.type !== 'AUTH_TOKEN_RECEIVED') return;
+
+  // Verify the message came from our web app
+  const allowedOrigins = ['https://katana-woad.vercel.app'];
+  if (!allowedOrigins.includes(sender.origin)) {
+    sendResponse({ ok: false, error: 'Unauthorized origin.' });
+    return;
+  }
+
+  chrome.storage.local.set({
+    authToken: message.token,
+    userEmail: message.email,
+    plan: message.plan
+  }, () => {
+    sendResponse({ ok: true });
+  });
+
+  return true; // keep channel open for async sendResponse
+});
+
 // ─── Main message router ────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
@@ -137,7 +162,7 @@ async function handleGradeSubmission(message, sendResponse) {
 
 // ─── Katana Backend API Call ─────────────────────────────────────────────────
 async function callKatanaAPI(authToken, submissionData, settings) {
-  const response = await fetch(`${KATANA_API_BASE}/v1/grade`, {
+  const response = await fetch(`${KATANA_API_BASE}/api/grade`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${authToken}`,
