@@ -202,7 +202,7 @@ Omit confidence_reason entirely if confidence is high.`;
     }).join('\n\n');
   }
 
-  const hasAttachments = fileAttachments.length > 0;
+  const hasAttachments = (data.submission?.fileAttachments?.length ?? 0) > 0;
   const submissionBody = hasAttachments
     ? '[The student\'s file(s) are attached as document(s) above — read them to evaluate the submission.]'
     : (data.submission?.content || '[No readable content available]');
