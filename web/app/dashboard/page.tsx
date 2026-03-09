@@ -81,16 +81,9 @@ export default async function DashboardPage() {
           <div className={styles.card}>
             <div className={styles.cardLabel}>Chrome Extension</div>
             <div className={styles.cardValue} style={{ fontSize: 14, marginTop: 4 }}>
-              Install the Katana Chrome extension, then sign in from the side panel to start grading.
+              The Katana Chrome extension is coming soon to the Chrome Web Store.
+              You&apos;ll receive an email when it&apos;s available.
             </div>
-            <a
-              href="https://chrome.google.com/webstore/detail/katana/PLACEHOLDER"
-              target="_blank"
-              rel="noopener"
-              className={styles.upgradeLink}
-            >
-              Open Chrome Web Store →
-            </a>
           </div>
         </div>
       </main>
