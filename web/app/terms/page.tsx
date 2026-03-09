@@ -205,7 +205,7 @@ export default function TermsPage() {
         <span>·</span>
         <Link href="/privacy">Privacy Policy</Link>
         <span>·</span>
-        <Link href="/fyi">FYI</Link>
+        <Link href="/faq">FAQ</Link>
       </footer>
     </div>
   );

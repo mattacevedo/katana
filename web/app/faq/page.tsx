@@ -1,11 +1,11 @@
-// app/fyi/page.tsx — FYI / FAQ page (content coming soon)
+// app/faq/page.tsx — FAQ page
 
 import Link from 'next/link';
 import styles from '../privacy/legal.module.css';
 
-export const metadata = { title: 'FYI — Katana' };
+export const metadata = { title: 'FAQ — Katana' };
 
-export default function FyiPage() {
+export default function FaqPage() {
   return (
     <div className={styles.page}>
       <nav className={styles.nav}>
@@ -14,7 +14,7 @@ export default function FyiPage() {
       </nav>
 
       <main className={styles.main}>
-        <h1 className={styles.title}>FYI</h1>
+        <h1 className={styles.title}>FAQ</h1>
         <p className={styles.meta}>gradewithkatana.com</p>
 
         <div className={styles.highlight}>
@@ -54,8 +54,7 @@ export default function FyiPage() {
         <section className={styles.section}>
           <h2>What browsers are supported?</h2>
           <p>
-            Google Chrome is required. Support for other Chromium-based browsers
-            (such as Edge and Brave) is coming soon.
+            Google Chrome is required. Firefox and Safari support is on the roadmap.
           </p>
         </section>
 

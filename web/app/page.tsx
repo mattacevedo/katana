@@ -16,7 +16,7 @@ export default function LandingPage() {
         <div className={styles.navLinks}>
           <Link href="#how-it-works">How It Works</Link>
           <Link href="#pricing">Pricing</Link>
-          <Link href="/fyi">FYI</Link>
+          <Link href="/faq">FAQ</Link>
           <Link href="/dashboard" className={styles.btnNavSecondary}>My Account</Link>
           <Link href="/auth/signin" className={styles.btnNav}>Sign In</Link>
         </div>
@@ -148,7 +148,7 @@ export default function LandingPage() {
         <p className={styles.sectionSub}>
           Katana is a Google Chrome extension — nothing to configure in Canvas, no IT department
           to involve, no integrations to set up. Install in minutes and start grading.
-          <br /><span style={{fontSize:'13px', color:'#9ca3af'}}>(Google Chrome required · Support for other browsers coming soon)</span>
+          <br /><span style={{fontSize:'13px', color:'#9ca3af'}}>(Google Chrome required · Firefox and Safari support coming soon)</span>
         </p>
         <div className={styles.steps}>
           <div className={styles.step}>
@@ -318,7 +318,7 @@ export default function LandingPage() {
               cta: 'Start Shogun',
               href: '/auth/signup?plan=shogun',
               highlight: false,
-              badge: 'Best for departments',
+              badge: 'Large classes & multi-section',
             },
           ].map(plan => (
             <div
@@ -387,7 +387,7 @@ export default function LandingPage() {
           <span>·</span>
           <Link href="/terms">Terms of Use</Link>
           <span>·</span>
-          <Link href="/fyi">FYI</Link>
+          <Link href="/faq">FAQ</Link>
         </div>
         <div className={styles.footerCopy}>
           © 2026 Torabashiri, LLC

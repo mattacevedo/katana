@@ -236,7 +236,7 @@ export default function PrivacyPage() {
         <span>·</span>
         <Link href="/terms">Terms of Use</Link>
         <span>·</span>
-        <Link href="/fyi">FYI</Link>
+        <Link href="/faq">FAQ</Link>
       </footer>
     </div>
   );
