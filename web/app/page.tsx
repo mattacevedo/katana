@@ -232,8 +232,7 @@ export default function LandingPage() {
           to train or improve any AI model — period.
         </p>
         <p className={styles.privacyBody}>
-          We are FERPA-aware and GDPR-ready. A Data Processing Agreement (DPA)
-          is available for institutions that require one.
+          We are FERPA-aware and GDPR-ready.
         </p>
         <div className={styles.privacyBadges}>
           <span className={styles.badge}>🔒 TLS encrypted</span>
@@ -241,7 +240,6 @@ export default function LandingPage() {
           <span className={styles.badge}>📚 FERPA-aware</span>
           <span className={styles.badge}>🌍 GDPR-ready</span>
           <span className={styles.badge}>🛡️ No AI training</span>
-          <span className={styles.badge}>📄 DPA available</span>
         </div>
         <Link href="/privacy" className={styles.privacyLink}>
           Read our full Privacy Policy →
@@ -390,6 +388,9 @@ export default function LandingPage() {
           <Link href="/terms">Terms of Use</Link>
           <span>·</span>
           <Link href="/fyi">FYI</Link>
+        </div>
+        <div className={styles.footerCopy}>
+          © 2026 Torabashiri, LLC
         </div>
       </footer>
 

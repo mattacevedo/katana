@@ -142,8 +142,8 @@ export default function TermsPage() {
         <section className={styles.section}>
           <h2>8. Intellectual Property</h2>
           <p>
-            The Katana software, branding, and website are owned by Katana and are protected
-            by intellectual property law. You retain all rights to your students&apos; submissions
+            The Katana software, branding, and website are owned by <strong>Torabashiri, LLC</strong> and
+            are protected by intellectual property law. You retain all rights to your students&apos; submissions
             and to grades and feedback you submit in Canvas.
           </p>
           <p>
@@ -165,7 +165,7 @@ export default function TermsPage() {
         <section className={styles.section}>
           <h2>10. Limitation of Liability</h2>
           <p>
-            TO THE MAXIMUM EXTENT PERMITTED BY LAW, KATANA SHALL NOT BE LIABLE FOR ANY
+            TO THE MAXIMUM EXTENT PERMITTED BY LAW, TORABASHIRI, LLC SHALL NOT BE LIABLE FOR ANY
             INDIRECT, INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES ARISING FROM YOUR USE
             OF THE SERVICE, INCLUDING ANY GRADING ERRORS OR DECISIONS MADE BASED ON
             AI-GENERATED OUTPUT. OUR TOTAL LIABILITY SHALL NOT EXCEED THE AMOUNT YOU PAID
@@ -185,8 +185,8 @@ export default function TermsPage() {
         <section className={styles.section}>
           <h2>12. Governing Law</h2>
           <p>
-            These Terms are governed by the laws of the United States and the state in which
-            Katana is incorporated, without regard to conflict of law provisions.
+            These Terms are governed by the laws of the United States and the state of
+            incorporation of Torabashiri, LLC, without regard to conflict of law provisions.
           </p>
         </section>
 
@@ -195,7 +195,7 @@ export default function TermsPage() {
           <p>
             Questions about these Terms:
             <br /><a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a>
-            <br />Katana · gradewithkatana.com
+            <br />Torabashiri, LLC · gradewithkatana.com
           </p>
         </section>
       </main>

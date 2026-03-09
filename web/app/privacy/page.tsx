@@ -27,8 +27,9 @@ export default function PrivacyPage() {
           <h2>1. Who We Are</h2>
           <p>
             Katana (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) is an AI-assisted grading tool available as a Google
-            Chrome extension. Katana was created by university professors and is operated at
-            <strong> gradewithkatana.com</strong>. Questions about this policy: <a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a>.
+            Chrome extension, operated by <strong>Torabashiri, LLC</strong> at
+            <strong> gradewithkatana.com</strong>. Katana was created by university professors.
+            Questions about this policy: <a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a>.
           </p>
         </section>
 
@@ -121,7 +122,7 @@ export default function PrivacyPage() {
                 <td>Standard server logs (IP, request metadata); no student content</td>
               </tr>
               <tr>
-                <td><strong>Stripe</strong></td>
+                <td><strong>Stripe</strong> <em>(when billing is active)</em></td>
                 <td>Payment processing</td>
                 <td>Billing name, email, payment method (handled directly by Stripe)</td>
               </tr>
@@ -134,28 +135,24 @@ export default function PrivacyPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>6. FERPA Compliance</h2>
+          <h2>6. FERPA Awareness</h2>
           <p>
-            Katana is designed to operate as a <strong>school official</strong> under
-            the Family Educational Rights and Privacy Act (FERPA), 20 U.S.C. § 1232g.
-            Specifically:
+            Katana is designed with FERPA (Family Educational Rights and Privacy Act,
+            20 U.S.C. § 1232g) in mind. Specifically:
           </p>
           <ul>
-            <li>We perform an institutional service — AI-assisted grading — that educational
-              institutions would otherwise perform manually.</li>
-            <li>We use student data solely for that authorized purpose and for no other commercial use.</li>
-            <li>We do not redisclose education records to any party not listed above.</li>
+            <li>We use student submission data solely to provide the grading service —
+              no other commercial use.</li>
+            <li>We do not disclose education records to any party not listed in the
+              subprocessors table above.</li>
             <li>We do not retain student submission data after grading is complete.</li>
+            <li>Student work is never used to train or improve any AI model.</li>
           </ul>
           <p>
-            Educational institutions remain the data controllers under FERPA. Instructors using
-            Katana are responsible for ensuring their use of Katana complies with their
-            institution&apos;s policies regarding the use of third-party tools in grading.
-          </p>
-          <p>
-            We provide a <strong>Data Processing Agreement (DPA)</strong> for institutions that
-            require one. Contact <a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a> to
-            request a DPA.
+            Instructors using Katana are responsible for ensuring their use of the tool
+            complies with their institution&apos;s policies regarding third-party tools in grading.
+            A Data Processing Agreement is available upon request for institutions that require one.
+            Contact <a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a>.
           </p>
         </section>
 
@@ -229,7 +226,7 @@ export default function PrivacyPage() {
           <p>
             Privacy questions, data subject requests, and DPA inquiries:
             <br /><a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a>
-            <br />Katana · gradewithkatana.com
+            <br />Torabashiri, LLC · gradewithkatana.com
           </p>
         </section>
       </main>
