@@ -14,8 +14,7 @@
 
   "host_permissions": [
     "*://*.instructure.com/*",
-    "https://app.katana.app/*",
-    "https://api.katana.app/*"
+    "https://katana-woad.vercel.app/*"
   ],
 
   "background": {

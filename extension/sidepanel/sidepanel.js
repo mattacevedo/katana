@@ -5,7 +5,7 @@
 
 'use strict';
 
-const APP_BASE = 'https://app.katana.app';
+const APP_BASE = 'https://katana-woad.vercel.app';
 
 // ─── Keep the service worker alive ────────────────────────────────────────
 let keepAlivePort = null;

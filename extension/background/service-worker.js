@@ -2,10 +2,10 @@
 // Central coordinator: message routing, Katana API calls, auth token management.
 //
 // KEY DIFFERENCE from prototype: instead of calling Claude directly,
-// we POST to https://api.katana.app/v1/grade — the backend handles
+// we POST to https://katana-woad.vercel.app/api/grade — the backend handles
 // auth validation, quota enforcement, and the Claude API call.
 
-const KATANA_API_BASE = 'https://api.katana.app';
+const KATANA_API_BASE = 'https://katana-woad.vercel.app';
 
 // ─── Keep the service worker alive while the side panel is open ─────────────
 chrome.runtime.onConnect.addListener(port => {
