@@ -35,24 +35,38 @@
 .demoDot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .demoUrl { margin-left: 8px; flex: 1; background: #e5e7eb; border-radius: 4px; font-size: 11px; color: #6b7280; padding: 3px 10px; font-family: monospace; }
 
-.demoContent { display: grid; grid-template-columns: 1fr 260px; min-height: 340px; }
+.demoContent { display: grid; grid-template-columns: 1fr 250px; min-height: 380px; }
 
-/* Canvas side */
-.demoCanvas { padding: 20px; border-right: 1px solid #e5e7eb; background: #fff; }
-.demoCanvasHeader { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px; }
-.demoCanvasTitle { font-size: 13px; font-weight: 700; color: var(--navy); }
-.demoCanvasAssign { font-size: 12px; color: var(--muted); }
-.demoCanvasStudent { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
-.demoSubmissionPreview { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: var(--text); line-height: 1.6; margin-bottom: 14px; }
-.demoSubmissionFade { color: #9ca3af; font-size: 11px; }
-.demoGradeRow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.demoGradeLabel { font-size: 12px; font-weight: 600; color: var(--muted); min-width: 40px; }
-.demoGradeBox { border: 2px solid var(--blue); border-radius: 6px; padding: 4px 12px; background: #eff6ff; }
-.demoGradeValue { font-size: 18px; font-weight: 800; color: var(--navy); animation: fadeInValue 12s ease-in-out infinite; }
-.demoGradeMax { font-size: 12px; color: var(--muted); }
-.demoFeedbackBox { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; background: #fafafa; }
-.demoFeedbackLabel { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-.demoFeedbackText { font-size: 12px; color: var(--text); line-height: 1.6; animation: fadeInValue 12s ease-in-out infinite; }
+/* Canvas SpeedGrader side */
+.demoCanvas { border-right: 1px solid #e5e7eb; background: #fff; display: flex; flex-direction: column; }
+
+/* Gray top header bar */
+.demoSgHeader { background: #4a4f57; padding: 7px 12px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.demoSgAssign { font-size: 11px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.demoSgStudentRow { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.demoSgArrow { font-size: 15px; color: rgba(255,255,255,0.7); line-height: 1; }
+.demoSgAvatar { width: 20px; height: 20px; border-radius: 50%; background: #60a5fa; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.demoSgStudent { font-size: 11px; color: #fff; font-weight: 500; }
+
+/* Body row */
+.demoSgBody { display: flex; flex: 1; overflow: hidden; }
+
+/* Document pane */
+.demoSgDoc { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #e5e7eb; overflow: hidden; }
+.demoSgToolbar { background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 5px 10px; display: flex; align-items: center; gap: 8px; font-size: 10px; color: #9ca3af; flex-shrink: 0; }
+.demoSgToolbarSep { color: #d1d5db; }
+.demoSgPaper { flex: 1; padding: 16px 18px; overflow: hidden; background: #fff; }
+.demoSgPaperTitle { font-size: 11px; font-weight: 700; color: #111827; margin-bottom: 10px; line-height: 1.4; }
+.demoSgPaperText { font-size: 10.5px; color: #374151; line-height: 1.7; margin-bottom: 8px; }
+.demoSgFade { color: #9ca3af; }
+
+/* Canvas grading panel */
+.demoSgGradePanel { width: 158px; flex-shrink: 0; padding: 10px 10px; display: flex; flex-direction: column; gap: 9px; border-left: 1px solid #e5e7eb; background: #fff; }
+.demoSgWordCount { font-size: 10px; color: #6b7280; }
+.demoSgAssessLabel { font-size: 12px; font-weight: 700; color: #111827; padding-top: 2px; border-top: 1px solid #e5e7eb; }
+.demoSgFieldLabel { font-size: 10px; font-weight: 600; color: #6b7280; margin-bottom: 3px; }
+.demoSgInput { border: 1px solid #d1d5db; border-radius: 4px; padding: 5px 8px; font-size: 15px; font-weight: 700; color: #111827; background: #fff; animation: fadeInValue 12s ease-in-out infinite; }
+.demoSgCommentBox { border: 1px solid #d1d5db; border-radius: 4px; padding: 7px 8px; font-size: 10px; color: #374151; line-height: 1.55; background: #fff; min-height: 72px; animation: fadeInValue 12s ease-in-out infinite; }
 
 /* Katana panel side */
 .demoPanel { background: #1a1a2e; padding: 16px; display: flex; flex-direction: column; gap: 8px; position: relative; overflow: hidden; }

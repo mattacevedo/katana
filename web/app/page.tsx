@@ -27,13 +27,13 @@ export default function LandingPage() {
         <div className={styles.heroBadge}>🎓 Built by university professors</div>
 
         <h1 className={styles.heroTitle}>
-          Grade 10× faster — right inside Canvas.
+          Less grading. More teaching.
         </h1>
         <p className={styles.heroSub}>
-          Katana is a <strong>Google Chrome extension</strong> that opens alongside Canvas SpeedGrader
-          — no IT department required, no Canvas integration.
-          Click <strong>&quot;Grade This Submission&quot;</strong> and AI fills in the score,
-          rubric ratings, and personalized feedback. You just review and hit Submit.
+          A <strong>Google Chrome extension</strong> that opens alongside Canvas SpeedGrader.
+          Click <strong>&quot;Grade This Submission&quot;</strong> and AI grades the essay or report
+          against your assignment instructions and rubric — then fills in the score, rubric ratings,
+          and written feedback automatically. You review and submit. No IT department. No Canvas integration.
         </p>
 
         <Link href="/auth/signup" className={styles.btnHero}>
@@ -60,29 +60,49 @@ export default function LandingPage() {
             <div className={styles.demoContent}>
               {/* Left: Canvas SpeedGrader */}
               <div className={styles.demoCanvas}>
-                <div className={styles.demoCanvasHeader}>
-                  <span className={styles.demoCanvasTitle}>SpeedGrader</span>
-                  <span className={styles.demoCanvasAssign}>Essay #3: Climate Policy Analysis</span>
-                </div>
-                <div className={styles.demoCanvasStudent}>👤 Jane Smith</div>
-                <div className={styles.demoSubmissionPreview}>
-                  <p>The 2015 Paris Agreement established a framework for...</p>
-                  <p className={styles.demoSubmissionFade}>Nations committed to limiting warming to 1.5°C above...</p>
-                </div>
-                <div className={styles.demoGradeRow}>
-                  <label className={styles.demoGradeLabel}>Grade</label>
-                  <div className={styles.demoGradeBox}>
-                    <span className={styles.demoGradeValue}>92</span>
-                    <span className={styles.demoGradeMax}> / 100</span>
+
+                {/* Gray top bar — assignment name + student nav */}
+                <div className={styles.demoSgHeader}>
+                  <div className={styles.demoSgAssign}>Essay #3: Climate Policy Analysis</div>
+                  <div className={styles.demoSgStudentRow}>
+                    <span className={styles.demoSgArrow}>‹</span>
+                    <span className={styles.demoSgAvatar}>JS</span>
+                    <span className={styles.demoSgStudent}>Jane Smith</span>
+                    <span className={styles.demoSgArrow}>›</span>
                   </div>
                 </div>
-                <div className={styles.demoFeedbackBox}>
-                  <div className={styles.demoFeedbackLabel}>Feedback</div>
-                  <div className={styles.demoFeedbackText}>
-                    Your thesis is clearly articulated and supported by
-                    specific examples from the Paris Agreement. The policy
-                    analysis in section 2 is particularly strong...
+
+                {/* Body: document viewer + grading panel */}
+                <div className={styles.demoSgBody}>
+
+                  {/* Document pane */}
+                  <div className={styles.demoSgDoc}>
+                    <div className={styles.demoSgToolbar}>
+                      <span>◁ 1 / 2 ▷</span>
+                      <span className={styles.demoSgToolbarSep}>|</span>
+                      <span>— ZOOM +</span>
+                    </div>
+                    <div className={styles.demoSgPaper}>
+                      <p className={styles.demoSgPaperTitle}>Climate Policy Analysis: The Paris Agreement</p>
+                      <p className={styles.demoSgPaperText}>The 2015 Paris Agreement established a landmark framework for international climate cooperation. Nations committed to limiting warming to 1.5°C above pre-industrial levels, requiring significant emissions reductions from all signatories.</p>
+                      <p className={`${styles.demoSgPaperText} ${styles.demoSgFade}`}>The policy implications for developing economies present a complex challenge that requires careful balancing of mitigation costs and adaptation needs...</p>
+                    </div>
                   </div>
+
+                  {/* Canvas grading panel */}
+                  <div className={styles.demoSgGradePanel}>
+                    <div className={styles.demoSgWordCount}>Word Count: 892</div>
+                    <div className={styles.demoSgAssessLabel}>Assessment</div>
+                    <div>
+                      <div className={styles.demoSgFieldLabel}>Grade out of 100</div>
+                      <div className={styles.demoSgInput}>92</div>
+                    </div>
+                    <div>
+                      <div className={styles.demoSgFieldLabel}>Comments</div>
+                      <div className={styles.demoSgCommentBox}>Your thesis is clearly articulated and supported by specific examples…</div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
 
@@ -105,7 +125,7 @@ export default function LandingPage() {
                 <div className={`${styles.demoState} ${styles.demoStateLoading}`}>
                   <div className={styles.demoSpinner} />
                   <p className={styles.demoLoadingText}>Analyzing submission…</p>
-                  <p className={styles.demoLoadingSub}>Reading rubric &amp; submission</p>
+                  <p className={styles.demoLoadingSub}>Reading instructions &amp; rubric</p>
                 </div>
 
                 {/* Result state */}
@@ -168,8 +188,9 @@ export default function LandingPage() {
             <div className={styles.stepIcon}>⚡</div>
             <h3 className={styles.stepTitle}>Click &quot;Grade This Submission&quot;</h3>
             <p className={styles.stepDesc}>
-              Katana reads the submission and your rubric, then generates a grade,
-              rubric ratings, and personalized written feedback in seconds.
+              Katana reads your assignment instructions and the student&apos;s essay or report.
+              If you have a rubric, it scores each criterion too. Grade and written feedback
+              are generated in seconds.
             </p>
           </div>
 
@@ -197,8 +218,8 @@ export default function LandingPage() {
           },
           {
             icon: '📋',
-            title: 'Rubric-aware',
-            desc: 'Reads your assignment rubric and scores each criterion precisely — just like a careful human grader would.',
+            title: 'Instructions & rubric aware',
+            desc: 'Grades against your assignment instructions and rubric, scoring each criterion precisely. No rubric? Katana grades from your instructions alone.',
           },
           {
             icon: '🎨',
@@ -262,7 +283,7 @@ export default function LandingPage() {
               per: '/month',
               grades: '50 grades / month',
               features: [
-                'Claude Sonnet AI',
+                'Essay & report grading',
                 'All tone profiles',
                 'Rubric support',
                 'Personalized feedback',
@@ -278,7 +299,7 @@ export default function LandingPage() {
               per: '/month',
               grades: '200 grades / month',
               features: [
-                'Claude Sonnet AI',
+                'Essay & report grading',
                 'All tone profiles',
                 'Rubric support',
                 'Personalized feedback',
@@ -294,7 +315,7 @@ export default function LandingPage() {
               per: '/month',
               grades: '1,000 grades / month',
               features: [
-                'Claude Sonnet AI',
+                'Essay & report grading',
                 'All tone profiles',
                 'Rubric support',
                 'Personalized feedback',
@@ -310,7 +331,7 @@ export default function LandingPage() {
               per: '/month',
               grades: '2,500 grades / month',
               features: [
-                'Claude Sonnet AI',
+                'Essay & report grading',
                 'All tone profiles',
                 'Rubric support',
                 'Personalized feedback',
