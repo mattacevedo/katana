@@ -3,7 +3,12 @@
 import Link from 'next/link';
 import styles from './legal.module.css';
 
-export const metadata = { title: 'Privacy Policy — Katana' };
+export const metadata = {
+  title: 'Privacy Policy',
+  description: 'Katana privacy policy — zero data storage, FERPA-aware, GDPR-ready. Student work is never retained or used to train AI.',
+  alternates: { canonical: 'https://www.gradewithkatana.com/privacy' },
+  robots: { index: true, follow: true },
+};
 
 export default function PrivacyPage() {
   return (

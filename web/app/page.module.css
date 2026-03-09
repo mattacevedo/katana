@@ -55,7 +55,7 @@
 .demoSgDoc { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #e5e7eb; overflow: hidden; }
 .demoSgToolbar { background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 5px 10px; display: flex; align-items: center; gap: 8px; font-size: 10px; color: #9ca3af; flex-shrink: 0; }
 .demoSgToolbarSep { color: #d1d5db; }
-.demoSgPaper { flex: 1; padding: 16px 18px; overflow: hidden; background: #fff; }
+.demoSgPaper { flex: 1; padding: 16px 18px; overflow: hidden; background: #fff; text-align: left; }
 .demoSgPaperTitle { font-size: 11px; font-weight: 700; color: #111827; margin-bottom: 10px; line-height: 1.4; }
 .demoSgPaperText { font-size: 10.5px; color: #374151; line-height: 1.7; margin-bottom: 8px; }
 .demoSgFade { color: #9ca3af; }
@@ -66,7 +66,7 @@
 .demoSgAssessLabel { font-size: 12px; font-weight: 700; color: #111827; padding-top: 2px; border-top: 1px solid #e5e7eb; }
 .demoSgFieldLabel { font-size: 10px; font-weight: 600; color: #6b7280; margin-bottom: 3px; }
 .demoSgInput { border: 1px solid #d1d5db; border-radius: 4px; padding: 5px 8px; font-size: 15px; font-weight: 700; color: #111827; background: #fff; animation: fadeInValue 12s ease-in-out infinite; }
-.demoSgCommentBox { border: 1px solid #d1d5db; border-radius: 4px; padding: 7px 8px; font-size: 10px; color: #374151; line-height: 1.55; background: #fff; min-height: 72px; animation: fadeInValue 12s ease-in-out infinite; }
+.demoSgCommentBox { border: 1px solid #d1d5db; border-radius: 4px; padding: 7px 8px; font-size: 10px; color: #374151; line-height: 1.55; background: #fff; min-height: 72px; text-align: left; animation: fadeInValue 12s ease-in-out infinite; }
 
 /* Katana panel side */
 .demoPanel { background: #1a1a2e; padding: 16px; display: flex; flex-direction: column; gap: 8px; position: relative; overflow: hidden; }
@@ -74,7 +74,7 @@
 .demoPanelStudent { font-size: 13px; font-weight: 600; color: #e2e8f0; }
 .demoPanelAssign { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
 
-.demoState { position: absolute; left: 16px; right: 16px; top: 88px; }
+.demoState { position: absolute; left: 16px; right: 16px; top: 106px; }
 
 .demoStateIdle { animation: showIdle 12s ease-in-out infinite; }
 .demoBtnGrade { width: 100%; padding: 10px; background: var(--blue); color: #fff; border: none; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -113,6 +113,29 @@
   95%, 100% { opacity: 0; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Animated cursor */
+.demoCursor {
+  position: absolute;
+  width: 13px;
+  height: 20px;
+  pointer-events: none;
+  z-index: 20;
+  filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
+  animation: cursorAnim 12s ease-in-out infinite;
+  /* CSS cursor arrow shape */
+  clip-path: polygon(0% 0%, 0% 75%, 22% 56%, 34% 86%, 48% 80%, 34% 48%, 62% 48%);
+  background: #fff;
+}
+@keyframes cursorAnim {
+  0%   { left: 88px; top: 190px; opacity: 0;   transform: scale(1); }
+  6%   { left: 88px; top: 190px; opacity: 1;   transform: scale(1); }
+  19%  { left: 28px; top: 128px; opacity: 1;   transform: scale(1); }
+  22%  {             top: 128px; opacity: 1;   transform: scale(0.75); }
+  25%  {             top: 128px; opacity: 1;   transform: scale(1); }
+  30%  {             top: 128px; opacity: 0; }
+  100% {             top: 128px; opacity: 0; }
+}
 
 /* ── Trust bar ──────────────────────────────────────────────────────────── */
 .trustBar { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; padding: 16px 40px; background: #f8fafc; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted); font-weight: 500; }

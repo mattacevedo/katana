@@ -3,7 +3,12 @@
 import Link from 'next/link';
 import styles from '../privacy/legal.module.css';
 
-export const metadata = { title: 'Terms of Use — Katana' };
+export const metadata = {
+  title: 'Terms of Use',
+  description: 'Terms of use for Katana, the AI grading assistant Chrome extension for Canvas SpeedGrader.',
+  alternates: { canonical: 'https://www.gradewithkatana.com/terms' },
+  robots: { index: true, follow: true },
+};
 
 export default function TermsPage() {
   return (

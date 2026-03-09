@@ -1,11 +1,42 @@
 // app/page.tsx — Landing page
 
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import styles from './page.module.css';
+
+export const metadata: Metadata = {
+  title: 'Katana — AI Grading Assistant for Canvas SpeedGrader',
+  description:
+    'A Google Chrome extension that grades student essays and reports in Canvas SpeedGrader with AI. One click fills in the score, rubric ratings, and written feedback. 50 free grades/month.',
+  alternates: { canonical: 'https://www.gradewithkatana.com' },
+  openGraph: { url: 'https://www.gradewithkatana.com' },
+};
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Katana',
+  applicationCategory: 'EducationalApplication',
+  operatingSystem: 'Google Chrome',
+  url: 'https://www.gradewithkatana.com',
+  description:
+    'AI grading assistant for Canvas SpeedGrader. Grades student essays and reports with one click — auto-fills score, rubric ratings, and written feedback.',
+  offers: [
+    { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free – 50 grades/month' },
+    { '@type': 'Offer', price: '5', priceCurrency: 'USD', name: 'Basic – 200 grades/month' },
+    { '@type': 'Offer', price: '20', priceCurrency: 'USD', name: 'Super – 1,000 grades/month' },
+    { '@type': 'Offer', price: '50', priceCurrency: 'USD', name: 'Shogun – 2,500 grades/month' },
+  ],
+  author: { '@type': 'Organization', name: 'Torabashiri, LLC', url: 'https://www.gradewithkatana.com' },
+};
 
 export default function LandingPage() {
   return (
     <main className={styles.main}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
 
       {/* ── Nav ─────────────────────────────────────────────────────────── */}
       <nav className={styles.nav}>
@@ -36,7 +67,7 @@ export default function LandingPage() {
           and written feedback automatically. You review and submit. No IT department. No Canvas integration.
         </p>
 
-        <Link href="/auth/signup" className={styles.btnHero}>
+        <Link href="/auth/signin" className={styles.btnHero}>
           Start Free
         </Link>
         <p className={styles.heroNote}>
@@ -80,7 +111,7 @@ export default function LandingPage() {
                     <div className={styles.demoSgToolbar}>
                       <span>◁ 1 / 2 ▷</span>
                       <span className={styles.demoSgToolbarSep}>|</span>
-                      <span>— ZOOM +</span>
+                      <span>100%</span>
                     </div>
                     <div className={styles.demoSgPaper}>
                       <p className={styles.demoSgPaperTitle}>Climate Policy Analysis: The Paris Agreement</p>
@@ -127,6 +158,9 @@ export default function LandingPage() {
                   <p className={styles.demoLoadingText}>Analyzing submission…</p>
                   <p className={styles.demoLoadingSub}>Reading instructions &amp; rubric</p>
                 </div>
+
+                {/* Animated cursor */}
+                <div className={styles.demoCursor} aria-hidden="true" />
 
                 {/* Result state */}
                 <div className={`${styles.demoState} ${styles.demoStateResult}`}>
@@ -289,7 +323,7 @@ export default function LandingPage() {
                 'Personalized feedback',
               ],
               cta: 'Get Started Free',
-              href: '/auth/signup',
+              href: '/auth/signin',
               highlight: false,
               badge: null,
             },
@@ -305,7 +339,7 @@ export default function LandingPage() {
                 'Personalized feedback',
               ],
               cta: 'Start Basic',
-              href: '/auth/signup?plan=basic',
+              href: '/auth/signin?plan=basic',
               highlight: false,
               badge: null,
             },
@@ -321,7 +355,7 @@ export default function LandingPage() {
                 'Personalized feedback',
               ],
               cta: 'Start Super',
-              href: '/auth/signup?plan=super',
+              href: '/auth/signin?plan=super',
               highlight: true,
               badge: 'Most Popular',
             },
@@ -337,7 +371,7 @@ export default function LandingPage() {
                 'Personalized feedback',
               ],
               cta: 'Start Shogun',
-              href: '/auth/signup?plan=shogun',
+              href: '/auth/signin?plan=shogun',
               highlight: false,
               badge: 'Large classes & multi-section',
             },

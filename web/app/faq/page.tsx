@@ -3,7 +3,11 @@
 import Link from 'next/link';
 import styles from '../privacy/legal.module.css';
 
-export const metadata = { title: 'FAQ — Katana' };
+export const metadata = {
+  title: 'FAQ',
+  description: 'Frequently asked questions about Katana — the AI grading assistant for Canvas SpeedGrader.',
+  alternates: { canonical: 'https://www.gradewithkatana.com/faq' },
+};
 
 export default function FaqPage() {
   return (
