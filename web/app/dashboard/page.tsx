@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '../../lib/supabase/server';
 import Link from 'next/link';
 import styles from './dashboard.module.css';
+import { getStripe } from '../../lib/stripe';
+import type Stripe from 'stripe';
 
 const PLAN_LIMITS: Record<string, number> = {
   free: 50,
@@ -20,6 +22,21 @@ const PLAN_DISPLAY: Record<string, string> = {
   shogun: 'Shogun',
 };
 
+// Fetch up to 12 paid invoices from Stripe for a given customer.
+async function fetchInvoices(stripeCustomerId: string): Promise<Stripe.Invoice[]> {
+  try {
+    const stripe = getStripe();
+    const { data } = await stripe.invoices.list({
+      customer: stripeCustomerId,
+      limit: 12,
+      status: 'paid',
+    });
+    return data;
+  } catch {
+    return [];
+  }
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -28,7 +45,7 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan, grades_this_period, period_start')
+    .select('plan, grades_this_period, period_start, stripe_customer_id')
     .eq('id', user.id)
     .single();
 
@@ -38,6 +55,9 @@ export default async function DashboardPage() {
   const periodStart = profile?.period_start
     ? new Date(profile.period_start).toLocaleDateString()
     : 'N/A';
+
+  const stripeCustomerId = profile?.stripe_customer_id ?? null;
+  const invoices = stripeCustomerId ? await fetchInvoices(stripeCustomerId) : [];
 
   return (
     <div className={styles.page}>
@@ -89,6 +109,51 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* ── Order History ─────────────────────────────────── */}
+        <section className={styles.orderSection}>
+          <h2 className={styles.orderTitle}>Billing History</h2>
+
+          {invoices.length === 0 ? (
+            <div className={styles.orderEmpty}>
+              No transactions yet.{plan === 'free' && ' Upgrade to a paid plan to get started.'}
+            </div>
+          ) : (
+            <div className={styles.orderTable}>
+              <div className={styles.orderHeader}>
+                <span>Date</span>
+                <span>Description</span>
+                <span>Amount</span>
+                <span>Status</span>
+                <span></span>
+              </div>
+              {invoices.map(inv => {
+                const date   = new Date(inv.created * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                const desc   = inv.lines.data[0]?.description ?? inv.number ?? 'Subscription';
+                const amount = inv.amount_paid != null
+                  ? new Intl.NumberFormat('en-US', { style: 'currency', currency: inv.currency.toUpperCase() }).format(inv.amount_paid / 100)
+                  : '—';
+                return (
+                  <div key={inv.id} className={styles.orderRow}>
+                    <span className={styles.orderDate}>{date}</span>
+                    <span className={styles.orderDesc}>{desc}</span>
+                    <span className={styles.orderAmount}>{amount}</span>
+                    <span className={styles.orderStatus}>
+                      <span className={styles.badge}>Paid</span>
+                    </span>
+                    <span>
+                      {inv.invoice_pdf && (
+                        <a href={inv.invoice_pdf} target="_blank" rel="noreferrer" className={styles.orderLink}>
+                          Receipt ↗
+                        </a>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

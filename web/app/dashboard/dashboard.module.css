@@ -18,3 +18,30 @@
 
 .progressBar { height: 6px; background: #e5e7eb; border-radius: 3px; margin-top: 8px; overflow: hidden; }
 .progressFill { height: 100%; background: #2563eb; border-radius: 3px; transition: width 0.3s; }
+
+/* ── Order History ──────────────────────────────────────────────────────── */
+.orderSection { margin-top: 40px; }
+.orderTitle { font-size: 16px; font-weight: 700; color: #1a1a2e; margin-bottom: 12px; }
+
+.orderEmpty { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px 20px; font-size: 14px; color: #6b7280; }
+
+.orderTable { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+
+.orderHeader,
+.orderRow { display: grid; grid-template-columns: 120px 1fr 100px 80px 80px; gap: 12px; align-items: center; padding: 12px 20px; }
+
+.orderHeader { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #9ca3af; border-bottom: 1px solid #f3f4f6; background: #fafafa; }
+
+.orderRow { font-size: 14px; color: #374151; border-bottom: 1px solid #f3f4f6; }
+.orderRow:last-child { border-bottom: none; }
+.orderRow:hover { background: #fafafa; }
+
+.orderDate { color: #6b7280; font-size: 13px; white-space: nowrap; }
+.orderDesc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orderAmount { font-weight: 600; color: #1a1a2e; }
+.orderStatus {}
+
+.badge { display: inline-block; background: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+
+.orderLink { font-size: 13px; color: #2563eb; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.orderLink:hover { text-decoration: underline; }
