@@ -94,6 +94,34 @@ export default function FaqPage() {
         </section>
 
         <section className={styles.section}>
+          <h2>Does Katana work with the Canvas mobile app?</h2>
+          <p>
+            Unfortunately, no. Katana is a Chrome extension that runs in your desktop browser
+            alongside SpeedGrader. It can&apos;t be installed on a phone or tablet, and it
+            doesn&apos;t have access to the Canvas mobile app. You&apos;ll need Google Chrome
+            on a Mac or PC to use it.
+          </p>
+        </section>
+
+        <section className={styles.section}>
+          <h2>What operating systems does Katana support?</h2>
+          <p>
+            Any operating system that runs Google Chrome — Windows, macOS, and Linux all work.
+            If Chrome is installed, Katana is installed.
+          </p>
+        </section>
+
+        <section className={styles.section}>
+          <h2>Will my school&apos;s IT department know I&apos;m using Katana?</h2>
+          <p>
+            No. Katana runs entirely inside your browser window and interacts with SpeedGrader
+            exactly the way you would if you were filling in grades and feedback by hand.
+            It makes no calls to Canvas&apos;s servers and leaves no footprint that differs
+            from normal instructor activity.
+          </p>
+        </section>
+
+        <section className={styles.section}>
           <h2>Questions?</h2>
           <p>
             Email us at{' '}
