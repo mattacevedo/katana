@@ -35,9 +35,11 @@ export default function FaqPage() {
         <section className={styles.section}>
           <h2>Does Katana store student work?</h2>
           <p>
-            No. Submission content is processed in real time and immediately discarded.
-            Nothing is written to a database or log file. See our{' '}
-            <Link href="/privacy">Privacy Policy</Link> for the full details.
+            No. When you grade a submission, the text is sent to Anthropic&apos;s Claude API
+            to generate the grade and feedback — that&apos;s the AI step. Neither Katana nor
+            Anthropic stores or logs that content. Anthropic does not use API inputs to train
+            their models. Nothing is written to Katana&apos;s own servers or databases.
+            See our <Link href="/privacy">Privacy Policy</Link> for the full details.
           </p>
         </section>
 
@@ -114,10 +116,11 @@ export default function FaqPage() {
         <section className={styles.section}>
           <h2>Will my school&apos;s IT department know I&apos;m using Katana?</h2>
           <p>
-            No. Katana runs entirely inside your browser window and interacts with SpeedGrader
-            exactly the way you would if you were filling in grades and feedback by hand.
-            It makes no calls to Canvas&apos;s servers and leaves no footprint that differs
-            from normal instructor activity.
+            From Canvas&apos;s perspective, Katana is invisible. SpeedGrader activity looks
+            identical to an instructor filling in grades by hand — Canvas&apos;s own servers
+            have no knowledge of Katana. The one external call Katana makes is to
+            Anthropic&apos;s API (the AI service that generates the grade and feedback),
+            which is entirely separate from Canvas.
           </p>
         </section>
 
