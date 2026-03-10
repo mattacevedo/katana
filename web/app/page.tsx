@@ -3,6 +3,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import styles from './page.module.css';
+import { createClient } from '../lib/supabase/server';
 
 export const metadata: Metadata = {
   title: 'Katana — AI Grading Assistant for Canvas SpeedGrader',
@@ -30,7 +31,10 @@ const jsonLd = {
   author: { '@type': 'Organization', name: 'Tamahagane, LLC', url: 'https://www.gradewithkatana.com' },
 };
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
   return (
     <main className={styles.main}>
       <script
@@ -48,8 +52,11 @@ export default function LandingPage() {
           <Link href="#how-it-works">How It Works</Link>
           <Link href="#pricing">Pricing</Link>
           <Link href="/faq">FAQ</Link>
-          <Link href="/dashboard" className={styles.btnNavSecondary}>My Account</Link>
-          <Link href="/auth/signin" className={styles.btnNav}>Sign In</Link>
+          {user ? (
+            <Link href="/dashboard" className={styles.btnNavSecondary}>My Account</Link>
+          ) : (
+            <Link href="/auth/signin" className={styles.btnNav}>Sign In</Link>
+          )}
         </div>
       </nav>
 
