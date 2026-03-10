@@ -61,11 +61,11 @@ function buildRawMime(params: {
   references?: string;
 }): string {
   const lines = [
-    `From: Katana <hello@gradewithkatana.com>`,
+    `From: The Katana Team <hello@gradewithkatana.com>`,
     `To: ${params.to}`,
     `Subject: ${params.subject}`,
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Type: text/html; charset=UTF-8',
   ];
   if (params.inReplyTo)  lines.push(`In-Reply-To: ${params.inReplyTo}`);
   if (params.references) lines.push(`References: ${params.references}`);
@@ -152,13 +152,27 @@ async function applyLabelToThread(accessToken: string, threadId: string, labelId
   }
 }
 
-// Remove hard line breaks within paragraphs that Claude inserts for readability.
-// Plain text emails display those as narrow columns — we want flowing paragraphs.
-function normalizeLineBreaks(text: string): string {
-  return text
-    .split(/\n{2,}/)                       // split on blank lines (paragraph boundaries)
-    .map(para => para.replace(/\n/g, ' ').trim())  // join single newlines within each paragraph
-    .join('\n\n');                         // rejoin paragraphs with a blank line between them
+// Convert Claude's plain text draft to simple HTML.
+// Switching from text/plain to text/html eliminates Gmail's fixed-width
+// rendering and gives us proper paragraph spacing and list formatting.
+function textToHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  const paragraphs = escaped
+    .split(/\n{2,}/)
+    .map(para => `<p style="margin:0 0 14px 0;line-height:1.6">${para.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+
+  return [
+    '<html><body style="font-family:-apple-system,BlinkMacSystemFont,',
+    "'Segoe UI',Arial,sans-serif;font-size:15px;color:#1a1a1a;",
+    'max-width:600px;margin:0;padding:0">',
+    paragraphs,
+    '</body></html>',
+  ].join('');
 }
 
 // ── Thread history ─────────────────────────────────────────────────────────
@@ -384,6 +398,8 @@ AUTO_SEND — Reply immediately, no human review needed. Use for:
 - Simple "thank you" emails that warrant a brief acknowledgment
 - IMPORTANT: Only use auto_send when you are confident the answer is complete and accurate.
   If you are uncertain about any detail, use needs_attention instead.
+- NEVER suggest the customer "reach out", "contact us", or "get in touch" in an auto_send reply.
+  They already have — you are the support contact. If you don't know the answer, use needs_attention.
 
 NEEDS_ATTENTION — Stage a draft reply + flag for human review. Use for:
 - Refund or billing dispute requests
@@ -474,7 +490,7 @@ Tone for all replies: Professional, warm, and concise. Address the person by fir
   }
 
   const replySubject = Subject.startsWith('Re:') ? Subject : `Re: ${Subject}`;
-  const draft        = normalizeLineBreaks(triage.draft);
+  const draft        = textToHtml(triage.draft);
 
   const raw = buildRawMime({
     to:         replyToAddress,
