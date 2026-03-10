@@ -401,7 +401,7 @@ export default function LandingPage() {
               cta: 'Start Shogun',
               href: '/auth/signin?plan=shogun',
               highlight: false,
-              badge: 'Large classes & multi-section',
+              badge: 'Large classes & high teaching load',
             },
           ].map(plan => (
             <div
