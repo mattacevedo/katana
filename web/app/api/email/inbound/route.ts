@@ -161,6 +161,95 @@ function normalizeLineBreaks(text: string): string {
     .join('\n\n');                         // rejoin paragraphs with a blank line between them
 }
 
+// ── Thread history ─────────────────────────────────────────────────────────
+// Fetches prior messages in the Gmail thread so Claude has conversation context.
+
+interface GmailPart {
+  mimeType: string;
+  body?:    { data?: string };
+  parts?:   GmailPart[];
+}
+
+interface GmailThreadMessage {
+  id:      string;
+  payload: GmailPart & { headers: { name: string; value: string }[] };
+}
+
+interface ConversationTurn {
+  direction: 'inbound' | 'outbound';
+  from:      string;
+  body:      string;
+}
+
+// Recursively extract plain text from a MIME part tree.
+// Prefers text/plain; falls back to stripped text/html.
+function extractTextFromPart(part: GmailPart): string {
+  if (part.mimeType === 'text/plain' && part.body?.data) {
+    return Buffer.from(part.body.data, 'base64url').toString('utf-8').trim();
+  }
+  if (part.mimeType === 'text/html' && part.body?.data) {
+    return Buffer.from(part.body.data, 'base64url')
+      .toString('utf-8')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  if (part.parts?.length) {
+    // For multipart/alternative, prefer the text/plain sub-part
+    const plain = part.parts.find(p => p.mimeType === 'text/plain');
+    if (plain) return extractTextFromPart(plain);
+    for (const sub of part.parts) {
+      const text = extractTextFromPart(sub);
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+// Fetch all prior messages in the thread (excludes the current incoming message
+// which is always last). Returns up to 10 turns to keep context manageable.
+async function fetchThreadHistory(
+  accessToken: string,
+  threadId:    string,
+): Promise<ConversationTurn[]> {
+  try {
+    const res = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) return [];
+
+    const thread = await res.json() as { messages: GmailThreadMessage[] };
+    const prior  = thread.messages.slice(0, -1).slice(-10); // exclude current; cap at 10
+
+    return prior.map(msg => {
+      const header = (name: string) =>
+        msg.payload.headers.find(h => h.name.toLowerCase() === name)?.value ?? '';
+
+      const from      = header('from');
+      const isOutbound = from.toLowerCase().includes('hello@gradewithkatana.com');
+      const rawBody   = extractTextFromPart(msg.payload);
+
+      // Trim each turn to 500 chars — enough for context without bloating the prompt
+      const body = rawBody.slice(0, 500) + (rawBody.length > 500 ? '…' : '');
+
+      return { direction: isOutbound ? 'outbound' : 'inbound', from, body };
+    });
+  } catch (err) {
+    console.warn('email/inbound: failed to fetch thread history', err);
+    return [];
+  }
+}
+
+function formatThreadHistory(turns: ConversationTurn[]): string {
+  if (!turns.length) return '';
+  const lines = turns.map(t => {
+    const speaker = t.direction === 'outbound' ? 'Katana (you)' : `Customer <${t.from}>`;
+    return `[${speaker}]\n${t.body}`;
+  });
+  return `PRIOR CONVERSATION (oldest first):\n${lines.join('\n\n')}\n`;
+}
+
 // ── Supabase account lookup ────────────────────────────────────────────────
 
 interface AccountInfo {
@@ -321,17 +410,23 @@ For needs_attention:
 For skip:
 {"action":"skip","reason":"<one sentence — why no reply is needed>"}
 
+If PRIOR CONVERSATION is present in the user message, use it to understand context — the customer may be following up on a previous issue, clarifying something, or escalating. Reference prior context naturally in your reply where relevant (e.g. "As we mentioned earlier…" or "Following up on your question about…").
+
 Tone for all replies: Professional, warm, and concise. Address the person by first name if available.`;
 
-  const userMessage = `Triage this email:
-
-From: ${senderDisplay}
-Subject: ${Subject}
-
-${emailBody}
-
----
-${accountContext}`;
+  const userMessage = [
+    'Triage this email:',
+    '',
+    threadHistoryStr,          // empty string if first message in thread
+    'LATEST MESSAGE:',
+    `From: ${senderDisplay}`,
+    `Subject: ${Subject}`,
+    '',
+    emailBody,
+    '',
+    '---',
+    accountContext,
+  ].join('\n');
 
   type TriageResult =
     | { action: 'auto_send';       draft: string }
@@ -376,6 +471,11 @@ ${accountContext}`;
   // Find the Gmail thread ID for the original email so we can explicitly thread
   // the reply/draft with it — prevents the sent message appearing as a new conversation.
   const threadId = await findGmailThreadId(accessToken, MessageID);
+
+  // Fetch prior messages in this thread so Claude has conversation context.
+  // Empty array if this is the first message or the fetch fails.
+  const threadHistory    = threadId ? await fetchThreadHistory(accessToken, threadId) : [];
+  const threadHistoryStr = formatThreadHistory(threadHistory);
 
   const raw = buildRawMime({
     to:         replyToAddress,
