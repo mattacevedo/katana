@@ -57,10 +57,13 @@ export default async function DashboardPage() {
             <div className={styles.cardLabel}>Plan</div>
             <div className={styles.cardValue}>{PLAN_DISPLAY[plan] ?? plan}</div>
             {plan === 'free' && (
-              <Link href="/#pricing" className={styles.upgradeLink}>View upgrade options →</Link>
+              <Link href="/api/upgrade?plan=basic" className={styles.upgradeLink}>Upgrade to Basic →</Link>
             )}
-            {plan !== 'free' && plan !== 'shogun' && (
-              <Link href="/#pricing" className={styles.upgradeLink}>Upgrade plan →</Link>
+            {plan === 'basic' && (
+              <Link href="/api/upgrade?plan=super" className={styles.upgradeLink}>Upgrade to Super →</Link>
+            )}
+            {plan === 'super' && (
+              <Link href="/api/upgrade?plan=shogun" className={styles.upgradeLink}>Upgrade to Shogun →</Link>
             )}
           </div>
 
