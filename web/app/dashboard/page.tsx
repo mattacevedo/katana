@@ -8,6 +8,11 @@ import styles from './dashboard.module.css';
 import { getStripe } from '../../lib/stripe';
 import type Stripe from 'stripe';
 
+interface SubscriptionStatus {
+  cancelAtPeriodEnd: boolean;
+  periodEnd: string; // formatted date string
+}
+
 const PLAN_LIMITS: Record<string, number> = {
   free: 50,
   basic: 200,
@@ -37,7 +42,27 @@ async function fetchInvoices(stripeCustomerId: string): Promise<Stripe.Invoice[]
   }
 }
 
-export default async function DashboardPage() {
+// Fetch live subscription status (cancel_at_period_end + period end date).
+async function fetchSubscriptionStatus(subscriptionId: string): Promise<SubscriptionStatus | null> {
+  try {
+    const stripe = getStripe();
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    return {
+      cancelAtPeriodEnd: sub.cancel_at_period_end,
+      periodEnd: new Date(sub.current_period_end * 1000).toLocaleDateString('en-US', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      }),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ upgraded?: string; cancelled?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -45,7 +70,7 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan, grades_this_period, period_start, stripe_customer_id')
+    .select('plan, grades_this_period, period_start, stripe_customer_id, stripe_subscription_id')
     .eq('id', user.id)
     .single();
 
@@ -56,8 +81,18 @@ export default async function DashboardPage() {
     ? new Date(profile.period_start).toLocaleDateString()
     : 'N/A';
 
-  const stripeCustomerId = profile?.stripe_customer_id ?? null;
-  const invoices = stripeCustomerId ? await fetchInvoices(stripeCustomerId) : [];
+  const stripeCustomerId    = profile?.stripe_customer_id ?? null;
+  const stripeSubscriptionId = profile?.stripe_subscription_id ?? null;
+
+  // Fetch Stripe data in parallel
+  const [invoices, subStatus] = await Promise.all([
+    stripeCustomerId    ? fetchInvoices(stripeCustomerId)                       : Promise.resolve([]),
+    stripeSubscriptionId && plan !== 'free'
+      ? fetchSubscriptionStatus(stripeSubscriptionId)
+      : Promise.resolve(null),
+  ]);
+
+  const { cancelled, upgraded } = await searchParams;
 
   return (
     <div className={styles.page}>
@@ -72,18 +107,41 @@ export default async function DashboardPage() {
         <h1 className={styles.title}>Dashboard</h1>
         <p className={styles.email}>{user.email}</p>
 
+        {/* Success banners */}
+        {upgraded === '1' && (
+          <div className={styles.banner} data-type="success">
+            🎉 You&apos;re now on the {PLAN_DISPLAY[plan] ?? plan} plan. Enjoy the extra grades!
+          </div>
+        )}
+        {cancelled === '1' && subStatus && (
+          <div className={styles.banner} data-type="info">
+            Your subscription has been cancelled. You keep full access until <strong>{subStatus.periodEnd}</strong>.
+          </div>
+        )}
+
         <div className={styles.cards}>
           <div className={styles.card}>
             <div className={styles.cardLabel}>Plan</div>
             <div className={styles.cardValue}>{PLAN_DISPLAY[plan] ?? plan}</div>
+
+            {/* Upgrade links for active paid users */}
             {plan === 'free' && (
               <Link href="/api/upgrade?plan=basic" className={styles.upgradeLink}>Upgrade to Basic →</Link>
             )}
-            {plan === 'basic' && (
+            {plan === 'basic' && !subStatus?.cancelAtPeriodEnd && (
               <Link href="/api/upgrade?plan=super" className={styles.upgradeLink}>Upgrade to Super →</Link>
             )}
-            {plan === 'super' && (
+            {plan === 'super' && !subStatus?.cancelAtPeriodEnd && (
               <Link href="/api/upgrade?plan=shogun" className={styles.upgradeLink}>Upgrade to Shogun →</Link>
+            )}
+
+            {/* Cancellation notice or cancel link */}
+            {subStatus?.cancelAtPeriodEnd ? (
+              <div className={styles.cancelNotice}>
+                Cancels {subStatus.periodEnd} — access continues until then
+              </div>
+            ) : plan !== 'free' && (
+              <Link href="/dashboard/cancel" className={styles.cancelLink}>Cancel subscription</Link>
             )}
           </div>
 
