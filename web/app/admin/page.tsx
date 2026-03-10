@@ -39,7 +39,7 @@ export default async function AdminPage() {
   // ── Auth check ────────────────────────────────────────────────────────────
   const serverSupabase = await createServerClient();
   const { data: { user } } = await serverSupabase.auth.getUser();
-  if (!user) redirect('/auth/signin');
+  if (!user) redirect('/auth/signin?next=/admin');
 
   const adminEmail = process.env.ADMIN_EMAIL || '';
   if (!adminEmail || user.email !== adminEmail) redirect('/');

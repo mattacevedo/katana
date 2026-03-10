@@ -19,7 +19,8 @@ const URL_ERROR_MESSAGES: Record<string, string> = {
 function SignInContent() {
   const searchParams = useSearchParams();
   const urlError = searchParams.get('error');
-  const plan = searchParams.get('plan') || '';
+  const plan     = searchParams.get('plan') || '';
+  const next     = searchParams.get('next') || '';   // e.g. /admin
   const urlErrorMessage = urlError
     ? (URL_ERROR_MESSAGES[urlError] || 'Something went wrong. Please try again.')
     : '';
@@ -36,11 +37,14 @@ function SignInContent() {
     setLoading(true);
     setError('');
 
+    // Pass ?next= through so the callback page knows where to redirect after auth
+    const callbackUrl = next
+      ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${window.location.origin}/auth/callback`;
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { emailRedirectTo: callbackUrl },
     });
 
     setLoading(false);
@@ -59,7 +63,7 @@ function SignInContent() {
           <h1 className={styles.title}>Check your inbox</h1>
           <p className={styles.subtitle}>
             We sent a magic link to <strong>{email}</strong>.<br />
-            Click it to sign in — the Katana extension activates automatically.
+            Click it to sign in — no password needed.
           </p>
           <p className={styles.hint}>
             Can&apos;t find it? Check your spam folder, or&nbsp;
