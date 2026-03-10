@@ -14,8 +14,20 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { createAdminClient } from '../../../../lib/supabase/admin';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const PLAN_LIMITS: Record<string, number> = {
+  free: 50, basic: 200, super: 1000, shogun: 2500,
+};
+
+const PLAN_LABELS: Record<string, string> = {
+  free:   'Free (50 grades/period)',
+  basic:  'Basic — $9.99/mo (200 grades/period)',
+  super:  'Super — $19.99/mo (1,000 grades/period)',
+  shogun: 'Shogun — $39.99/mo (2,500 grades/period)',
+};
 
 const NEEDS_ATTENTION_LABEL = 'Needs Attention';
 
@@ -141,6 +153,57 @@ async function labelInboundThread(
   }
 }
 
+// ── Supabase account lookup ────────────────────────────────────────────────
+
+interface AccountInfo {
+  id:                 string;
+  plan:               string;
+  grades_this_period: number;
+  period_start:       string | null;
+  member_since:       string | null;
+}
+
+async function lookupAccount(email: string): Promise<AccountInfo | null> {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase.rpc('lookup_profile_by_email', {
+      p_email: email.toLowerCase(),
+    });
+    if (error) {
+      console.warn('email/inbound: account lookup error', error.message);
+      return null;
+    }
+    // RPC returns an array (RETURNS TABLE); take the first row
+    const row = Array.isArray(data) ? data[0] : data;
+    return row ?? null;
+  } catch (err) {
+    console.warn('email/inbound: account lookup threw', err);
+    return null;
+  }
+}
+
+function formatAccountContext(account: AccountInfo | null): string {
+  if (!account) {
+    return 'SENDER ACCOUNT:\n- Katana customer: No (email not found in our system)';
+  }
+
+  const plan       = account.plan || 'free';
+  const limit      = PLAN_LIMITS[plan] ?? 50;
+  const used       = account.grades_this_period ?? 0;
+  const remaining  = Math.max(0, limit - used);
+  const memberSince = account.member_since
+    ? new Date(account.member_since).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    : 'unknown';
+
+  return [
+    'SENDER ACCOUNT:',
+    `- Katana customer: Yes`,
+    `- Plan: ${PLAN_LABELS[plan] ?? plan}`,
+    `- Grades used this period: ${used} of ${limit} (${remaining} remaining)`,
+    `- Member since: ${memberSince}`,
+  ].join('\n');
+}
+
 // ── Main handler ───────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -172,7 +235,11 @@ export async function POST(req: NextRequest) {
     || '[No body]';
   const senderDisplay = FromName ? `${FromName} <${replyToAddress}>` : replyToAddress;
 
-  // 4. Claude triage + draft (single API call)
+  // 4. Look up whether the sender has a Katana account
+  const account        = await lookupAccount(replyToAddress);
+  const accountContext = formatAccountContext(account);
+
+  // 5. Claude triage + draft (single API call)
   const systemPrompt = `You are an email support agent for Katana. You triage inbound emails and draft replies on behalf of the Katana team.
 
 == ABOUT KATANA ==
@@ -253,7 +320,10 @@ Tone for all replies: Professional, warm, and concise. Address the person by fir
 From: ${senderDisplay}
 Subject: ${Subject}
 
-${emailBody}`;
+${emailBody}
+
+---
+${accountContext}`;
 
   type TriageResult =
     | { action: 'auto_send';       draft: string }
@@ -278,7 +348,7 @@ ${emailBody}`;
     return NextResponse.json({ error: 'AI triage failed.' }, { status: 500 });
   }
 
-  // 5. Act on Claude's decision
+  // 6. Act on Claude's decision
   if (triage.action === 'skip') {
     console.log(`email/inbound: skip — ${triage.reason} (from: ${From}, subject: "${Subject}")`);
     return NextResponse.json({ action: 'skip', reason: triage.reason });
