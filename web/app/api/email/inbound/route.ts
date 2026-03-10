@@ -78,20 +78,24 @@ function buildRawMime(params: {
     .replace(/=+$/, '');
 }
 
-async function sendGmailMessage(accessToken: string, raw: string): Promise<void> {
+async function sendGmailMessage(accessToken: string, raw: string, threadId?: string | null): Promise<void> {
+  const body: Record<string, string> = { raw };
+  if (threadId) body.threadId = threadId;
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Gmail send error (${res.status}): ${await res.text()}`);
 }
 
-async function createGmailDraft(accessToken: string, raw: string): Promise<void> {
+async function createGmailDraft(accessToken: string, raw: string, threadId?: string | null): Promise<void> {
+  const message: Record<string, string> = { raw };
+  if (threadId) message.threadId = threadId;
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: { raw } }),
+    body: JSON.stringify({ message }),
   });
   if (!res.ok) throw new Error(`Gmail draft error (${res.status}): ${await res.text()}`);
 }
@@ -118,29 +122,24 @@ async function getOrCreateLabel(accessToken: string, labelName: string): Promise
   return created.id;
 }
 
-// Search Gmail for the original inbound email by its Message-ID header,
-// then apply the label to its thread. Fails gracefully — the draft is
-// still created even if the label step doesn't find the message in time.
-async function labelInboundThread(
-  accessToken: string,
-  messageId:   string,
-  labelId:     string
-): Promise<void> {
-  // Ensure Message-ID has angle brackets for the Gmail search operator
+// Search Gmail for the original inbound email by its RFC 2822 Message-ID.
+// Returns the Gmail threadId so it can be reused for threading AND labeling.
+async function findGmailThreadId(accessToken: string, messageId: string): Promise<string | null> {
   const searchId = messageId.startsWith('<') ? messageId : `<${messageId}>`;
-  const searchRes = await fetch(
+  const res = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(`rfc822msgid:${searchId}`)}`,
     { headers: { 'Authorization': `Bearer ${accessToken}` } }
   );
-  const { messages = [] } = await searchRes.json() as { messages?: { id: string; threadId: string }[] };
-
+  const { messages = [] } = await res.json() as { messages?: { id: string; threadId: string }[] };
   if (!messages.length) {
-    console.warn(`email/inbound: could not find Gmail thread for Message-ID ${messageId} to apply label`);
-    return;
+    console.warn(`email/inbound: Gmail thread not found for Message-ID ${messageId}`);
+    return null;
   }
+  return messages[0].threadId;
+}
 
-  const threadId = messages[0].threadId;
-  const modRes = await fetch(
+async function applyLabelToThread(accessToken: string, threadId: string, labelId: string): Promise<void> {
+  const res = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}/modify`,
     {
       method: 'POST',
@@ -148,9 +147,18 @@ async function labelInboundThread(
       body: JSON.stringify({ addLabelIds: [labelId] }),
     }
   );
-  if (!modRes.ok) {
-    console.warn(`email/inbound: failed to apply label to thread ${threadId}: ${await modRes.text()}`);
+  if (!res.ok) {
+    console.warn(`email/inbound: failed to apply label to thread ${threadId}: ${await res.text()}`);
   }
+}
+
+// Remove hard line breaks within paragraphs that Claude inserts for readability.
+// Plain text emails display those as narrow columns — we want flowing paragraphs.
+function normalizeLineBreaks(text: string): string {
+  return text
+    .split(/\n{2,}/)                       // split on blank lines (paragraph boundaries)
+    .map(para => para.replace(/\n/g, ' ').trim())  // join single newlines within each paragraph
+    .join('\n\n');                         // rejoin paragraphs with a blank line between them
 }
 
 // ── Supabase account lookup ────────────────────────────────────────────────
@@ -355,6 +363,7 @@ ${accountContext}`;
   }
 
   const replySubject = Subject.startsWith('Re:') ? Subject : `Re: ${Subject}`;
+  const draft        = normalizeLineBreaks(triage.draft);
 
   let accessToken: string;
   try {
@@ -364,18 +373,22 @@ ${accountContext}`;
     return NextResponse.json({ error: 'Gmail authentication failed.' }, { status: 500 });
   }
 
+  // Find the Gmail thread ID for the original email so we can explicitly thread
+  // the reply/draft with it — prevents the sent message appearing as a new conversation.
+  const threadId = await findGmailThreadId(accessToken, MessageID);
+
   const raw = buildRawMime({
     to:         replyToAddress,
     subject:    replySubject,
-    body:       triage.draft,
+    body:       draft,
     inReplyTo:  MessageID,
     references: MessageID,
   });
 
   if (triage.action === 'auto_send') {
     try {
-      await sendGmailMessage(accessToken, raw);
-      console.log(`email/inbound: auto-sent reply to ${replyToAddress} re: "${Subject}"`);
+      await sendGmailMessage(accessToken, raw, threadId);
+      console.log(`email/inbound: auto-sent reply to ${replyToAddress} re: "${Subject}" (thread: ${threadId ?? 'unknown'})`);
     } catch (err) {
       console.error('email/inbound: Gmail send error', err);
       return NextResponse.json({ error: 'Failed to send reply.' }, { status: 500 });
@@ -385,7 +398,7 @@ ${accountContext}`;
 
   // needs_attention: create draft + label the original inbox thread
   try {
-    await createGmailDraft(accessToken, raw);
+    await createGmailDraft(accessToken, raw, threadId);
     console.log(`email/inbound: draft created for "${Subject}" from ${replyToAddress}`);
   } catch (err) {
     console.error('email/inbound: Gmail draft error', err);
@@ -394,8 +407,10 @@ ${accountContext}`;
 
   try {
     const labelId = await getOrCreateLabel(accessToken, NEEDS_ATTENTION_LABEL);
-    await labelInboundThread(accessToken, MessageID, labelId);
-    console.log(`email/inbound: "${NEEDS_ATTENTION_LABEL}" label applied — ${triage.reason}`);
+    if (threadId) {
+      await applyLabelToThread(accessToken, threadId, labelId);
+      console.log(`email/inbound: "${NEEDS_ATTENTION_LABEL}" label applied — ${triage.reason}`);
+    }
   } catch (err) {
     // Label failure is non-fatal — the draft is already created
     console.warn('email/inbound: label step failed (non-fatal)', err);
