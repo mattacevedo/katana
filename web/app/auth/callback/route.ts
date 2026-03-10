@@ -31,8 +31,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/auth/signin?error=invalid_code`);
   }
 
-  // Determine where to send the user after a successful exchange
-  const redirectTarget = next && next.startsWith('/')
+  // Determine where to send the user after a successful exchange.
+  // Validate that `next` is a safe relative path: must start with / but NOT //
+  // (protocol-relative URLs like //evil.com would bypass a simple startsWith check).
+  const isSafePath = next.startsWith('/') && !next.startsWith('//');
+  const redirectTarget = isSafePath
     ? `${origin}${next}`
     : EXTENSION_ID
       ? `${origin}/auth/extension-callback`

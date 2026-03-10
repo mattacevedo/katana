@@ -23,6 +23,7 @@ const PLAN_LIMITS: Record<string, number> = {
 const ALLOWED_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-5']);
 const ALLOWED_MIME_TYPES = new Set(['application/pdf']);
 const MAX_CUSTOM_INSTRUCTIONS = 1000; // chars
+const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB per attachment
 
 // ─── Rate limiter (Upstash Redis) ─────────────────────────────────────────
 // Activates only when env vars are present so the app degrades gracefully
@@ -82,22 +83,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 3. Check quota: count grades used this billing period
+  // 3. Check quota: fetch plan to determine the limit
+  //    Upsert ensures a profile row always exists (handles brand-new users).
   const { data: profile } = await supabase
     .from('profiles')
+    .upsert({ id: user.id }, { onConflict: 'id', ignoreDuplicates: true })
     .select('plan, grades_this_period, period_start')
     .eq('id', user.id)
     .single();
 
   const plan = profile?.plan || 'free';
   const limit = PLAN_LIMITS[plan] ?? 50;
-  const used = profile?.grades_this_period ?? 0;
-
-  if (used >= limit) {
-    return json({
-      error: `You've used all ${limit} grades for this period. Upgrade your plan at gradewithkatana.com to continue grading.`
-    }, 402);
-  }
 
   // 3. Parse request body
   let body: { submissionData: unknown; settings: unknown };
@@ -130,9 +126,33 @@ export async function POST(req: NextRequest) {
     if (!ALLOWED_MIME_TYPES.has(f.mediaType)) {
       return json({ error: `Unsupported file type: ${f.mediaType}. Only PDF is supported.` }, 400);
     }
+    // Reject files larger than 20 MB (base64-decoded size)
+    const byteLength = Math.floor(f.base64.length * 0.75);
+    if (byteLength > MAX_FILE_BYTES) {
+      return json({ error: 'Attached file exceeds the 20 MB limit.' }, 400);
+    }
   }
 
-  // 4. Build prompts and call Claude
+  // 4. Atomically claim one quota slot before calling Claude.
+  //    Uses a Postgres RPC that does CHECK + INCREMENT in one statement,
+  //    preventing the TOCTOU race condition from concurrent requests.
+  const { data: allowed, error: rpcError } = await supabase.rpc('increment_grade_count', {
+    p_user_id: user.id,
+    p_limit:   limit,
+  });
+
+  if (rpcError) {
+    console.error('Katana /api/grade: increment_grade_count RPC error', rpcError);
+    return json({ error: 'Failed to verify quota. Please try again.' }, 500);
+  }
+
+  if (!allowed) {
+    return json({
+      error: `You've used all ${limit} grades for this period. Upgrade your plan at gradewithkatana.com to continue grading.`
+    }, 402);
+  }
+
+  // 5. Build prompts and call Claude
   const { systemPrompt, userMessage } = buildPrompts(submissionData, settings);
   const fileAttachments = attachments; // already validated above
 
@@ -140,17 +160,16 @@ export async function POST(req: NextRequest) {
   try {
     result = await callClaude(systemPrompt, userMessage, fileAttachments, settings.model);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Claude API error.';
-    console.error('Katana /api/grade: Claude error', message);
-    return json({ error: `AI error: ${message}` }, 500);
+    // Roll back the quota slot we just claimed — Claude failed, grade not consumed
+    await supabase
+      .from('profiles')
+      .update({ grades_this_period: (profile?.grades_this_period ?? 0) })
+      .eq('id', user.id);
+    console.error('Katana /api/grade: Claude error', err);
+    return json({ error: 'Failed to grade the submission. Please try again.' }, 500);
   }
 
-  // 5. Increment usage counter
-  await supabase
-    .from('profiles')
-    .update({ grades_this_period: used + 1 })
-    .eq('id', user.id);
-
+  // Quota was already incremented atomically before the Claude call.
   return json(result);
 }
 
@@ -185,7 +204,13 @@ async function callClaude(
   if (!rawText) throw new Error('Empty response from Claude.');
 
   const jsonText = rawText.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-  const parsed = JSON.parse(jsonText) as GradeResult;
+
+  let parsed: GradeResult;
+  try {
+    parsed = JSON.parse(jsonText) as GradeResult;
+  } catch {
+    throw new Error('Claude returned malformed JSON.');
+  }
 
   if (!parsed.grade || !parsed.feedback) {
     throw new Error('Claude response missing required fields.');

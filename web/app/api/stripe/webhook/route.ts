@@ -22,15 +22,26 @@ import { createAdminClient } from '../../../../lib/supabase/admin';
 // Required: disable Next.js body parser so we get the raw bytes for sig verification
 export const config = { api: { bodyParser: false } };
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+// Validate UUID format for supabase_user_id values from Stripe metadata
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuid(v: string | undefined): v is string {
+  return !!v && UUID_RE.test(v);
+}
 
 export async function POST(req: NextRequest) {
+  // ── 0. Verify webhook secret is configured ────────────────────────────────
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error('webhook: STRIPE_WEBHOOK_SECRET is not configured');
+    return NextResponse.json({ error: 'Webhook not configured.' }, { status: 500 });
+  }
+
   // ── 1. Verify Stripe signature ────────────────────────────────────────────
   const rawBody = await req.text();
   const sig = req.headers.get('stripe-signature');
 
-  if (!sig || !webhookSecret) {
-    return NextResponse.json({ error: 'Missing signature or webhook secret.' }, { status: 400 });
+  if (!sig) {
+    return NextResponse.json({ error: 'Missing stripe-signature header.' }, { status: 400 });
   }
 
   let event: Stripe.Event;
@@ -56,8 +67,8 @@ export async function POST(req: NextRequest) {
         // is only a creation param and not present on the session object itself)
         const userId = session.metadata?.supabase_user_id;
 
-        if (!userId) {
-          console.error('webhook: checkout.session.completed — missing supabase_user_id in metadata');
+        if (!isValidUuid(userId)) {
+          console.error('webhook: checkout.session.completed — missing or invalid supabase_user_id in metadata');
           break;
         }
 
@@ -84,7 +95,7 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         const userId = subscription.metadata?.supabase_user_id;
 
-        if (!userId) {
+        if (!isValidUuid(userId)) {
           // Fall back to looking up by stripe_customer_id
           await syncPlanByCustomerId(
             supabase, subscription.customer as string, subscription
@@ -109,7 +120,7 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         const userId = subscription.metadata?.supabase_user_id;
 
-        if (userId) {
+        if (isValidUuid(userId)) {
           await supabase
             .from('profiles')
             .update({ plan: 'free', stripe_subscription_id: null })
@@ -134,7 +145,7 @@ export async function POST(req: NextRequest) {
         );
         const userId = subscription.metadata?.supabase_user_id;
 
-        if (userId) {
+        if (isValidUuid(userId)) {
           await supabase
             .from('profiles')
             .update({ plan: 'free' })

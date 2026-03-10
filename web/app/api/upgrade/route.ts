@@ -11,8 +11,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '../../../lib/supabase/server';
 import { createAdminClient } from '../../../lib/supabase/admin';
 import { stripe, STRIPE_PRICES } from '../../../lib/stripe';
+import { Redis } from '@upstash/redis';
+import { Ratelimit } from '@upstash/ratelimit';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.gradewithkatana.com';
+
+// Rate limit: max 10 checkout session creations per user per hour
+const upgradeRatelimit = (
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+)
+  ? new Ratelimit({
+      redis: new Redis({
+        url:   process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      }),
+      limiter: Ratelimit.slidingWindow(10, '1 h'),
+      prefix: 'katana:upgrade',
+    })
+  : null;
 
 const PLAN_PRICE: Record<string, string> = {
   basic:  STRIPE_PRICES.basic_monthly,
@@ -32,6 +48,14 @@ export async function GET(req: NextRequest) {
   // ── Check session ────────────────────────────────────────────────────────
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+
+  // Rate limit by IP for logged-out users, by user ID for logged-in users
+  if (upgradeRatelimit && user) {
+    const { success } = await upgradeRatelimit.limit(`user:${user.id}`);
+    if (!success) {
+      return NextResponse.redirect(`${SITE_URL}/#pricing`);
+    }
+  }
 
   if (!user) {
     // Not signed in — send to sign-in, then back here after auth
