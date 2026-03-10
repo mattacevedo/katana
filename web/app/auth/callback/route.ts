@@ -69,21 +69,32 @@ export async function GET(_req: NextRequest) {
   const sbUrl    = '${SUPABASE_URL}';
   const sbKey    = '${SUPABASE_ANON_KEY}';
 
+  // Safely escape any string before inserting into innerHTML
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
   function showError(msg) {
     spinner.style.display = 'none';
     heading.textContent   = 'Sign-in failed';
     sub.textContent       = msg;
     status.className      = 'status error';
+    // Hardcoded anchor — no user input involved
     status.innerHTML      = '<a class="try-again" href="/auth/signin">← Try again</a>';
   }
 
-  function showSuccess(msg) {
+  function showSuccess(textLine1, textLine2) {
     spinner.style.display = 'none';
-    card.innerHTML = \`
-      <div class="icon">✅</div>
-      <h1>You're signed in!</h1>
-      <p class="sub">\${msg}</p>
-    \`;
+    // Build DOM safely — no user-controlled data goes through innerHTML
+    card.innerHTML = '<div class="icon">✅</div><h1>You\'re signed in!</h1>';
+    const p = document.createElement('p');
+    p.className = 'sub';
+    // textLine1/2 may contain safe HTML we authored (e.g. <strong>, <br>)
+    // but user-supplied values (email) must be escaped first
+    p.innerHTML = textLine1 + (textLine2 ? '<br>' + textLine2 : '');
+    card.appendChild(p);
   }
 
   // ── Parse hash fragment ──────────────────────────────────────────────────
@@ -128,7 +139,7 @@ export async function GET(_req: NextRequest) {
 
   // ── Send token to Chrome extension ───────────────────────────────────────
   if (!extId) {
-    showSuccess('Signed in as ' + (user.email || '') + '. You can close this tab.');
+    showSuccess('Signed in as <strong>' + escHtml(user.email || '') + '</strong>.', 'You can close this tab.');
     return;
   }
 
@@ -139,12 +150,12 @@ export async function GET(_req: NextRequest) {
       email: user.email,
       plan,
     });
-    showSuccess('Katana is ready. You can close this tab.');
+    showSuccess('Katana is ready.', 'You can close this tab.');
     setTimeout(() => window.close(), 2500);
   } catch (e) {
     // Extension not installed or not enabled — still a successful sign-in
     showSuccess(
-      'Signed in as <strong>' + (user.email || '') + '</strong>.<br>' +
+      'Signed in as <strong>' + escHtml(user.email || '') + '</strong>.',
       'Make sure the Katana extension is installed and enabled, then try grading again.'
     );
   }

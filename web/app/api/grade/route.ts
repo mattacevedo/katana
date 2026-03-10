@@ -17,6 +17,11 @@ const PLAN_LIMITS: Record<string, number> = {
   shogun: 2500,
 };
 
+// ─── Allowlists ───────────────────────────────────────────────────────────
+const ALLOWED_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-5']);
+const ALLOWED_MIME_TYPES = new Set(['application/pdf']);
+const MAX_CUSTOM_INSTRUCTIONS = 1000; // chars
+
 export async function POST(req: NextRequest) {
   // 1. Auth: validate Bearer token via Supabase
   const authHeader = req.headers.get('Authorization');
@@ -64,9 +69,29 @@ export async function POST(req: NextRequest) {
     settings: GradingSettings;
   };
 
+  // 4a. Input validation — reject anything outside the allowlists
+  if (settings.model && !ALLOWED_MODELS.has(settings.model)) {
+    return json({ error: 'Invalid model specified.' }, 400);
+  }
+  if (
+    settings.customInstructions &&
+    settings.customInstructions.length > MAX_CUSTOM_INSTRUCTIONS
+  ) {
+    return json(
+      { error: `Custom instructions must be ${MAX_CUSTOM_INSTRUCTIONS} characters or fewer.` },
+      400
+    );
+  }
+  const attachments = (submissionData?.submission?.fileAttachments ?? []) as FileAttachment[];
+  for (const f of attachments) {
+    if (!ALLOWED_MIME_TYPES.has(f.mediaType)) {
+      return json({ error: `Unsupported file type: ${f.mediaType}. Only PDF is supported.` }, 400);
+    }
+  }
+
   // 4. Build prompts and call Claude
   const { systemPrompt, userMessage } = buildPrompts(submissionData, settings);
-  const fileAttachments = (submissionData.submission?.fileAttachments ?? []) as FileAttachment[];
+  const fileAttachments = attachments; // already validated above
 
   let result: GradeResult;
   try {
@@ -93,6 +118,8 @@ async function callClaude(
   fileAttachments: FileAttachment[],
   model = 'claude-sonnet-4-6'
 ): Promise<GradeResult> {
+  // Defence-in-depth: enforce allowlist even if caller skips prior validation
+  const safeModel = ALLOWED_MODELS.has(model) ? model : 'claude-sonnet-4-6';
   const userContent: Anthropic.MessageParam['content'] = fileAttachments.length > 0
     ? [
         ...fileAttachments.map(f => ({
@@ -104,7 +131,7 @@ async function callClaude(
     : userMessage;
 
   const response = await anthropic.messages.create({
-    model,
+    model: safeModel,
     max_tokens: 2048,
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }],
