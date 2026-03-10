@@ -157,8 +157,8 @@ function stripMarkdown(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, '')               // fenced code blocks
     .replace(/`([^`]+)`/g, '$1')                   // inline code
-    .replace(/\*\*(.+?)\*\*/gs, '$1')              // **bold**
-    .replace(/__(.+?)__/gs, '$1')                  // __bold__
+    .replace(/\*\*([\s\S]+?)\*\*/g, '$1')           // **bold**
+    .replace(/__([\s\S]+?)__/g, '$1')              // __bold__
     .replace(/\*(?!\*)([^*\n]+)\*(?!\*)/g, '$1')  // *italic*
     .replace(/_(?!_)([^_\n]+)_(?!_)/g, '$1')      // _italic_
     .replace(/^#{1,6}\s+(.+)$/gm, '$1')            // ## headers → plain text
