@@ -124,8 +124,10 @@ export async function POST(req: NextRequest) {
 
   const senderDisplay = FromName ? `${FromName} <${replyToAddress}>` : replyToAddress;
 
-  // 4. Draft a reply with Claude
-  const systemPrompt = `You are a support agent for Katana, an AI grading assistant Chrome extension for Canvas LMS SpeedGrader. You draft email replies on behalf of the Katana team.
+  // 4. Ask Claude to triage + draft in one call
+  //    Returns JSON: { needs_reply: bool, reason?: string, draft?: string }
+  //    If needs_reply is false (automated/system email), we skip draft creation.
+  const systemPrompt = `You are a support agent for Katana, an AI grading assistant Chrome extension for Canvas LMS SpeedGrader. You help triage incoming emails and draft replies on behalf of the Katana team.
 
 About Katana:
 - Chrome extension that helps instructors grade student work in Canvas SpeedGrader
@@ -133,11 +135,32 @@ About Katana:
 - Plans: Free (50 grades/period), Basic ($9.99/mo, 200 grades), Super ($19.99/mo, 1,000 grades), Shogun ($39.99/mo, 2,500 grades)
 - Website: gradewithkatana.com
 
-Tone: Professional, warm, and concise. Sign off as "The Katana Team".
+Your first job is to decide if this email needs a human reply. Do NOT draft a reply for:
+- Automated notifications (Google Workspace, billing, security alerts, system emails)
+- Marketing or promotional emails
+- Newsletters or announcements
+- Delivery receipts or read confirmations
+- Any email where a human reply would be unwanted or inappropriate
 
-Write ONLY the reply body — no subject line, no headers. Start directly with the greeting (e.g. "Hi [Name],").`;
+DO draft a reply for:
+- Real people asking questions, reporting issues, or requesting support
+- Potential customers asking about features or pricing
+- Users having trouble with the extension
 
-  const userMessage = `Draft a reply to this support email:
+Respond ONLY with valid JSON:
+{
+  "needs_reply": true,
+  "draft": "<reply body only — no subject, no headers. Start with greeting e.g. 'Hi [Name],' and sign off as 'The Katana Team'.>"
+}
+or if no reply is needed:
+{
+  "needs_reply": false,
+  "reason": "<one sentence explaining why no reply is needed>"
+}
+
+Tone for replies: Professional, warm, and concise.`;
+
+  const userMessage = `Triage this email and draft a reply if appropriate:
 
 From: ${senderDisplay}
 Subject: ${Subject}
@@ -153,8 +176,19 @@ ${emailBody}`;
       messages:   [{ role: 'user', content: userMessage }],
     });
 
-    draftBody = response.content[0]?.type === 'text' ? response.content[0].text : '';
-    if (!draftBody) throw new Error('Claude returned empty response.');
+    const rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
+    if (!rawText) throw new Error('Claude returned empty response.');
+
+    const jsonText = rawText.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+    const parsed = JSON.parse(jsonText) as { needs_reply: boolean; reason?: string; draft?: string };
+
+    if (!parsed.needs_reply) {
+      console.log(`email/inbound: skipping draft — ${parsed.reason} (from: ${From}, subject: "${Subject}")`);
+      return NextResponse.json({ skipped: true, reason: parsed.reason });
+    }
+
+    draftBody = parsed.draft || '';
+    if (!draftBody) throw new Error('Claude indicated reply needed but draft was empty.');
   } catch (err) {
     console.error('email/inbound: Claude error', err);
     return NextResponse.json({ error: 'AI draft generation failed.' }, { status: 500 });
