@@ -204,3 +204,57 @@
 .footerLeft { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .footerRight { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .footerCopy { width: 100%; font-size: 12px; color: #9ca3af; }
+
+/* ── Mobile responsive ─────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+
+  /* Nav: keep logo + Sign In only, hide everything else */
+  .nav { padding: 12px 20px; }
+  .logoTagline { display: none; }
+  .navLinks { gap: 10px; }
+  .navLinks a:not(.btnNav):not(.btnNavSecondary) { display: none; }
+  .btnNavSecondary { display: none; }
+  .btnNav { padding: 7px 14px; font-size: 13px; }
+
+  /* Hero: tighter padding, smaller sub text */
+  .hero { padding: 44px 20px 36px; }
+  .heroSub { font-size: 15px; }
+  .demoWrapper { margin-top: 32px; }
+
+  /* Demo: hide the Canvas side entirely, show only the Katana panel */
+  .demoContent { grid-template-columns: 1fr; min-height: 0; }
+  .demoCanvas { display: none; }
+  .demoPanel { min-height: 300px; border-radius: 0; }
+  .demoCursor { display: none; }
+
+  /* Trust bar: hide dividers so items wrap cleanly */
+  .trustDivider { display: none; }
+  .trustBar { gap: 8px 16px; padding: 14px 20px; font-size: 12px; }
+
+  /* How it works */
+  .howItWorks { padding: 48px 20px; }
+  .stepArrow { display: none; }
+  .step { min-width: 100%; max-width: 100%; }
+
+  /* Features */
+  .features { padding: 16px 20px 48px; gap: 16px; }
+
+  /* Privacy */
+  .privacyCallout { padding: 48px 20px; }
+  .privacyBody { font-size: 14px; }
+
+  /* Pricing */
+  .pricing { padding: 48px 20px; }
+  .plans { gap: 16px; }
+  .planCard { min-width: 100%; }
+
+  /* Professor */
+  .professorSection { padding: 40px 20px; }
+  .professorCard { padding: 24px 20px; }
+  .professorQuote { font-size: 14px; }
+
+  /* Footer: stack and center */
+  .footer { padding: 24px 20px; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+  .footerLeft { justify-content: center; }
+  .footerRight { justify-content: center; }
+}
