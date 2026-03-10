@@ -47,7 +47,7 @@ export default function FaqPage() {
           <h2>Does it work with any Canvas course?</h2>
           <p>
             Yes — Katana works directly in the Canvas SpeedGrader browser page.
-            There is no Canvas API integration, no LTI setup, and no IT department involvement.
+            Katana works entirely through your browser — no LTI setup, no OAuth integration, no backend connection to Canvas, and no IT department involvement.
             If you can open SpeedGrader in Google Chrome, Katana works.
           </p>
         </section>
@@ -109,7 +109,7 @@ export default function FaqPage() {
           <h2>What operating systems does Katana support?</h2>
           <p>
             Any operating system that runs Google Chrome — Windows, macOS, and Linux all work.
-            If Chrome is installed, Katana is installed.
+            If Chrome is installed, Katana can be installed.
           </p>
         </section>
 

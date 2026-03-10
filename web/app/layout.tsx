@@ -31,9 +31,9 @@ export const metadata: Metadata = {
     'automated grading',
     'Instructure Canvas',
   ],
-  authors: [{ name: 'Torabashiri, LLC', url: siteUrl }],
-  creator: 'Torabashiri, LLC',
-  publisher: 'Torabashiri, LLC',
+  authors: [{ name: 'Tamahagane, LLC', url: siteUrl }],
+  creator: 'Tamahagane, LLC',
+  publisher: 'Tamahagane, LLC',
   robots: {
     index: true,
     follow: true,

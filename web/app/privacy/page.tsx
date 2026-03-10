@@ -32,7 +32,7 @@ export default function PrivacyPage() {
           <h2>1. Who We Are</h2>
           <p>
             Katana (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) is an AI-assisted grading tool available as a Google
-            Chrome extension, operated by <strong>Torabashiri, LLC</strong> at
+            Chrome extension, operated by <strong>Tamahagane, LLC</strong> at
             <strong> gradewithkatana.com</strong>. Katana was created by university professors.
             Questions about this policy: <a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a>.
           </p>
@@ -231,7 +231,7 @@ export default function PrivacyPage() {
           <p>
             Privacy questions, data subject requests, and DPA inquiries:
             <br /><a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a>
-            <br />Torabashiri, LLC · gradewithkatana.com
+            <br />Tamahagane, LLC · gradewithkatana.com
           </p>
         </section>
       </main>

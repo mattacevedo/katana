@@ -114,7 +114,9 @@
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Animated cursor */
+/* Animated cursor — enters from the right edge of the Katana panel
+   (overflow:hidden clips it when left > 250px, so it "materialises" as
+   it sweeps left toward the Grade button) */
 .demoCursor {
   position: absolute;
   width: 13px;
@@ -123,18 +125,23 @@
   z-index: 20;
   filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
   animation: cursorAnim 12s ease-in-out infinite;
-  /* CSS cursor arrow shape */
   clip-path: polygon(0% 0%, 0% 75%, 22% 56%, 34% 86%, 48% 80%, 34% 48%, 62% 48%);
   background: #fff;
 }
 @keyframes cursorAnim {
-  0%   { left: 88px; top: 190px; opacity: 0;   transform: scale(1); }
-  6%   { left: 88px; top: 190px; opacity: 1;   transform: scale(1); }
-  19%  { left: 28px; top: 128px; opacity: 1;   transform: scale(1); }
-  22%  {             top: 128px; opacity: 1;   transform: scale(0.75); }
-  25%  {             top: 128px; opacity: 1;   transform: scale(1); }
-  30%  {             top: 128px; opacity: 0; }
-  100% {             top: 128px; opacity: 0; }
+  /* Start outside panel right edge at button height — hidden by overflow:hidden */
+  0%   { left: 260px; top: 148px; opacity: 1; transform: scale(1); }
+  /* Sweep in from the right and arrive at the Grade button */
+  18%  { left: 125px; top: 124px; opacity: 1; transform: scale(1); }
+  /* Click — compress */
+  22%  { left: 125px; top: 124px; opacity: 1; transform: scale(0.72); }
+  /* Release */
+  26%  { left: 125px; top: 124px; opacity: 1; transform: scale(1); }
+  /* Fade out */
+  32%  { left: 125px; top: 124px; opacity: 0; }
+  /* Stay hidden until cycle resets */
+  99%  { left: 260px; top: 148px; opacity: 0; }
+  100% { left: 260px; top: 148px; opacity: 0; }
 }
 
 /* ── Trust bar ──────────────────────────────────────────────────────────── */

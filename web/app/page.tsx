@@ -27,7 +27,7 @@ const jsonLd = {
     { '@type': 'Offer', price: '20', priceCurrency: 'USD', name: 'Super – 1,000 grades/month' },
     { '@type': 'Offer', price: '50', priceCurrency: 'USD', name: 'Shogun – 2,500 grades/month' },
   ],
-  author: { '@type': 'Organization', name: 'Torabashiri, LLC', url: 'https://www.gradewithkatana.com' },
+  author: { '@type': 'Organization', name: 'Tamahagane, LLC', url: 'https://www.gradewithkatana.com' },
 };
 
 export default function LandingPage() {
@@ -64,7 +64,7 @@ export default function LandingPage() {
           A <strong>Google Chrome extension</strong> that opens alongside Canvas SpeedGrader.
           Click <strong>&quot;Grade This Submission&quot;</strong> and AI grades the essay or report
           against your assignment instructions and rubric — then fills in the score, rubric ratings,
-          and written feedback automatically. You review and submit. No IT department. No Canvas integration.
+          and written feedback automatically. You review and submit. No IT department. No LTI setup or backend integration.
         </p>
 
         <Link href="/auth/signin" className={styles.btnHero}>
@@ -109,9 +109,7 @@ export default function LandingPage() {
                   {/* Document pane */}
                   <div className={styles.demoSgDoc}>
                     <div className={styles.demoSgToolbar}>
-                      <span>◁ 1 / 2 ▷</span>
-                      <span className={styles.demoSgToolbarSep}>|</span>
-                      <span>100%</span>
+                      <span>◁ 1 / 55 ▷</span>
                     </div>
                     <div className={styles.demoSgPaper}>
                       <p className={styles.demoSgPaperTitle}>Climate Policy Analysis: The Paris Agreement</p>
@@ -465,7 +463,7 @@ export default function LandingPage() {
           <Link href="/faq">FAQ</Link>
         </div>
         <div className={styles.footerCopy}>
-          © 2026 Torabashiri, LLC
+          © 2026 Tamahagane, LLC
         </div>
       </footer>
 

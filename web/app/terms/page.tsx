@@ -147,7 +147,7 @@ export default function TermsPage() {
         <section className={styles.section}>
           <h2>8. Intellectual Property</h2>
           <p>
-            The Katana software, branding, and website are owned by <strong>Torabashiri, LLC</strong> and
+            The Katana software, branding, and website are owned by <strong>Tamahagane, LLC</strong> and
             are protected by intellectual property law. You retain all rights to your students&apos; submissions
             and to grades and feedback you submit in Canvas.
           </p>
@@ -191,7 +191,7 @@ export default function TermsPage() {
           <h2>12. Governing Law</h2>
           <p>
             These Terms are governed by the laws of the United States and the state of
-            incorporation of Torabashiri, LLC, without regard to conflict of law provisions.
+            incorporation of Tamahagane, LLC, without regard to conflict of law provisions.
           </p>
         </section>
 
@@ -200,7 +200,7 @@ export default function TermsPage() {
           <p>
             Questions about these Terms:
             <br /><a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a>
-            <br />Torabashiri, LLC · gradewithkatana.com
+            <br />Tamahagane, LLC · gradewithkatana.com
           </p>
         </section>
       </main>
