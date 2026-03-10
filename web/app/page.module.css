@@ -114,34 +114,35 @@
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Animated cursor — enters from the right edge of the Katana panel
-   (overflow:hidden clips it when left > 250px, so it "materialises" as
-   it sweeps left toward the Grade button) */
+/* Animated cursor — Mac-style SVG pointer enters from the right edge of the
+   Katana panel (overflow:hidden clips it when left > 250px, so it "materialises"
+   as it sweeps left toward the Grade button).
+   SVG viewBox is 0 0 28 28. Hotspot (tip) at (9.2, 7.3) in viewBox units.
+   At 20×20px rendered size: hotspot_x ≈ 6.6px, hotspot_y ≈ 5.2px from top-left.
+   Button center in panel ≈ (125px, 123px) → element arrives at (118px, 118px). */
 .demoCursor {
   position: absolute;
-  width: 13px;
+  width: 20px;
   height: 20px;
   pointer-events: none;
   z-index: 20;
   filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
   animation: cursorAnim 12s ease-in-out infinite;
-  clip-path: polygon(0% 0%, 0% 75%, 22% 56%, 34% 86%, 48% 80%, 34% 48%, 62% 48%);
-  background: #fff;
 }
 @keyframes cursorAnim {
   /* Start outside panel right edge at button height — hidden by overflow:hidden */
-  0%   { left: 260px; top: 148px; opacity: 1; transform: scale(1); }
-  /* Sweep in from the right and arrive at the Grade button */
-  18%  { left: 125px; top: 124px; opacity: 1; transform: scale(1); }
+  0%   { left: 260px; top: 118px; opacity: 1; transform: scale(1); }
+  /* Sweep in from the right — hotspot lands on Grade button centre */
+  18%  { left: 118px; top: 118px; opacity: 1; transform: scale(1); }
   /* Click — compress */
-  22%  { left: 125px; top: 124px; opacity: 1; transform: scale(0.72); }
+  22%  { left: 118px; top: 118px; opacity: 1; transform: scale(0.72); }
   /* Release */
-  26%  { left: 125px; top: 124px; opacity: 1; transform: scale(1); }
+  26%  { left: 118px; top: 118px; opacity: 1; transform: scale(1); }
   /* Fade out */
-  32%  { left: 125px; top: 124px; opacity: 0; }
+  32%  { left: 118px; top: 118px; opacity: 0; }
   /* Stay hidden until cycle resets */
-  99%  { left: 260px; top: 148px; opacity: 0; }
-  100% { left: 260px; top: 148px; opacity: 0; }
+  99%  { left: 260px; top: 118px; opacity: 0; }
+  100% { left: 260px; top: 118px; opacity: 0; }
 }
 
 /* ── Trust bar ──────────────────────────────────────────────────────────── */
