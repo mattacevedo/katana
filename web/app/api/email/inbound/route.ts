@@ -350,7 +350,8 @@ How it works:
 5. Katana auto-fills all fields in Canvas — instructor reviews, edits if needed, and submits
 
 Supported submission types: text submissions, PDF files, Word documents (.docx)
-Not supported: legacy Word .doc files, video/audio/image submissions
+Not supported: legacy Word .doc files, Apple Pages .pages files, video/audio/image submissions
+For .pages files: Apple Pages uses a proprietary binary format that cannot be parsed. Instructors should ask students to export as PDF (File → Export To → PDF) or Word (.docx) before submitting.
 Supported grading schemas: points, percentage, letter grade (A–F), GPA scale (4.0), pass/fail
 
 Installation:
