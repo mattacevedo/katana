@@ -1,27 +1,26 @@
 // app/api/email/inbound/route.ts
 //
-// Postmark inbound webhook handler.
+// Postmark inbound webhook handler — three-tier email triage.
 //
-// Flow:
-//   Email → hello@gradewithkatana.com
-//   → Google Workspace forwards copy to Postmark inbound address
-//   → Postmark parses and POSTs to this endpoint
-//   → We call Claude to draft a reply
-//   → We create a Gmail draft via the Gmail API (draft-first, never auto-sends)
+// Claude classifies every inbound email into one of three actions:
+//   auto_send      → straightforward FAQ / support question; reply sent immediately
+//   needs_attention → refunds, complaints, escalations; draft created + "Needs Attention"
+//                     label applied to the original inbox thread
+//   skip           → automated notifications, system emails; no action taken
 //
 // Setup:
-//   • Postmark webhook URL must include the secret:
-//       https://www.gradewithkatana.com/api/email/inbound?secret=POSTMARK_WEBHOOK_SECRET
-//   • GOOGLE_REFRESH_TOKEN must be set after running the one-time OAuth flow at
-//       /api/email/oauth
+//   • Postmark webhook URL: https://www.gradewithkatana.com/api/email/inbound?secret=POSTMARK_WEBHOOK_SECRET
+//   • GOOGLE_REFRESH_TOKEN must be set after running /api/email/oauth
 
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Skip auto-replies and bounces to prevent loops
-const SKIP_SUBJECT_RE = /^(auto.?reply|out of office|delivery status|undelivered|bounce|mailer.daemon)/i;
+const NEEDS_ATTENTION_LABEL = 'Needs Attention';
+
+// Hard skip: delivery failures and mail loops — never reply to these
+const SKIP_SUBJECT_RE = /^(auto.?reply|out of office|delivery status|undelivered mail|bounce|mailer.daemon|mail delivery)/i;
 const SKIP_SENDER_RE  = /^(mailer-daemon|postmaster|no-reply|noreply)@/i;
 
 // ── Gmail helpers ──────────────────────────────────────────────────────────
@@ -37,11 +36,8 @@ async function getGmailAccessToken(): Promise<string> {
       grant_type:    'refresh_token',
     }),
   });
-
   const data = await res.json();
-  if (!data.access_token) {
-    throw new Error(`Failed to get Gmail access token: ${JSON.stringify(data)}`);
-  }
+  if (!data.access_token) throw new Error(`Failed to get Gmail access token: ${JSON.stringify(data)}`);
   return data.access_token;
 }
 
@@ -59,13 +55,10 @@ function buildRawMime(params: {
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=UTF-8',
   ];
-
   if (params.inReplyTo)  lines.push(`In-Reply-To: ${params.inReplyTo}`);
   if (params.references) lines.push(`References: ${params.references}`);
-
   lines.push('', params.body);
 
-  // Gmail API requires URL-safe base64 (base64url)
   return Buffer.from(lines.join('\r\n'))
     .toString('base64')
     .replace(/\+/g, '-')
@@ -73,19 +66,78 @@ function buildRawMime(params: {
     .replace(/=+$/, '');
 }
 
+async function sendGmailMessage(accessToken: string, raw: string): Promise<void> {
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw }),
+  });
+  if (!res.ok) throw new Error(`Gmail send error (${res.status}): ${await res.text()}`);
+}
+
 async function createGmailDraft(accessToken: string, raw: string): Promise<void> {
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type':  'application/json',
-    },
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: { raw } }),
   });
+  if (!res.ok) throw new Error(`Gmail draft error (${res.status}): ${await res.text()}`);
+}
 
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gmail API error (${res.status}): ${err}`);
+// Get the "Needs Attention" label ID, creating it if it doesn't exist yet
+async function getOrCreateLabel(accessToken: string, labelName: string): Promise<string> {
+  const listRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  });
+  const { labels = [] } = await listRes.json() as { labels: { id: string; name: string }[] };
+  const existing = labels.find(l => l.name === labelName);
+  if (existing) return existing.id;
+
+  const createRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: labelName,
+      labelListVisibility:   'labelShow',
+      messageListVisibility: 'show',
+    }),
+  });
+  const created = await createRes.json() as { id: string };
+  return created.id;
+}
+
+// Search Gmail for the original inbound email by its Message-ID header,
+// then apply the label to its thread. Fails gracefully — the draft is
+// still created even if the label step doesn't find the message in time.
+async function labelInboundThread(
+  accessToken: string,
+  messageId:   string,
+  labelId:     string
+): Promise<void> {
+  // Ensure Message-ID has angle brackets for the Gmail search operator
+  const searchId = messageId.startsWith('<') ? messageId : `<${messageId}>`;
+  const searchRes = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(`rfc822msgid:${searchId}`)}`,
+    { headers: { 'Authorization': `Bearer ${accessToken}` } }
+  );
+  const { messages = [] } = await searchRes.json() as { messages?: { id: string; threadId: string }[] };
+
+  if (!messages.length) {
+    console.warn(`email/inbound: could not find Gmail thread for Message-ID ${messageId} to apply label`);
+    return;
+  }
+
+  const threadId = messages[0].threadId;
+  const modRes = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}/modify`,
+    {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ addLabelIds: [labelId] }),
+    }
+  );
+  if (!modRes.ok) {
+    console.warn(`email/inbound: failed to apply label to thread ${threadId}: ${await modRes.text()}`);
   }
 }
 
@@ -107,67 +159,108 @@ export async function POST(req: NextRequest) {
   }
 
   const { From, FromName, Subject = '', TextBody, HtmlBody, MessageID, ReplyTo } = payload;
-
-  // Use Reply-To if present (some senders set this), otherwise use From
   const replyToAddress = ReplyTo || From;
 
-  // 3. Skip auto-replies and delivery notifications
+  // 3. Hard-skip delivery failures and mail loops before calling Claude
   if (SKIP_SUBJECT_RE.test(Subject) || SKIP_SENDER_RE.test(From)) {
-    console.log(`email/inbound: skipping auto-reply/bounce from ${From}`);
-    return NextResponse.json({ skipped: true });
+    console.log(`email/inbound: hard-skip (bounce/loop) from ${From}`);
+    return NextResponse.json({ skipped: true, reason: 'bounce or auto-reply' });
   }
 
-  // Strip HTML tags if no plain text body available
-  const emailBody = TextBody?.trim()
+  const emailBody    = TextBody?.trim()
     || HtmlBody?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
     || '[No body]';
-
   const senderDisplay = FromName ? `${FromName} <${replyToAddress}>` : replyToAddress;
 
-  // 4. Ask Claude to triage + draft in one call
-  //    Returns JSON: { needs_reply: bool, reason?: string, draft?: string }
-  //    If needs_reply is false (automated/system email), we skip draft creation.
-  const systemPrompt = `You are a support agent for Katana, an AI grading assistant Chrome extension for Canvas LMS SpeedGrader. You help triage incoming emails and draft replies on behalf of the Katana team.
+  // 4. Claude triage + draft (single API call)
+  const systemPrompt = `You are an email support agent for Katana. You triage inbound emails and draft replies on behalf of the Katana team.
 
-About Katana:
-- Chrome extension that helps instructors grade student work in Canvas SpeedGrader
-- AI reads the submission, rubric, and assignment instructions, then fills in the grade, rubric ratings, and written feedback in one click
-- Plans: Free (50 grades/period), Basic ($9.99/mo, 200 grades), Super ($19.99/mo, 1,000 grades), Shogun ($39.99/mo, 2,500 grades)
-- Website: gradewithkatana.com
+== ABOUT KATANA ==
+Katana is an AI-powered grading assistant Chrome extension for Canvas LMS SpeedGrader.
 
-Your first job is to decide if this email needs a human reply. Do NOT draft a reply for:
-- Automated notifications (Google Workspace, billing, security alerts, system emails)
-- Marketing or promotional emails
-- Newsletters or announcements
-- Delivery receipts or read confirmations
-- Any email where a human reply would be unwanted or inappropriate
+How it works:
+1. Instructor opens Canvas SpeedGrader on any assignment
+2. Katana's side panel appears in Chrome
+3. Click "Grade" — Katana reads the student's submission, assignment instructions, and rubric
+4. Claude AI generates a grade, rubric ratings, and written feedback
+5. Katana auto-fills all fields in Canvas — instructor reviews, edits if needed, and submits
 
-DO draft a reply for:
-- Real people asking questions, reporting issues, or requesting support
-- Potential customers asking about features or pricing
-- Users having trouble with the extension
+Supported submission types: text submissions, PDF file uploads
+Supported grading schemas: points, percentage, letter grade (A–F), GPA scale (4.0), pass/fail
 
-Respond ONLY with valid JSON:
-{
-  "needs_reply": true,
-  "draft": "<reply body only — no subject, no headers. Start with greeting e.g. 'Hi [Name],' and sign off as 'The Katana Team'.>"
-}
-or if no reply is needed:
-{
-  "needs_reply": false,
-  "reason": "<one sentence explaining why no reply is needed>"
-}
+Installation:
+- Install from the Chrome Web Store (search "Katana SpeedGrader")
+- Sign in or create a free account at gradewithkatana.com
+- Navigate to any Canvas SpeedGrader page — the side panel opens automatically
 
-Tone for replies: Professional, warm, and concise.`;
+Plans (grade quota resets every 30 days):
+- Free: 50 grades/period — no credit card required
+- Basic: $9.99/month — 200 grades/period
+- Super: $19.99/month — 1,000 grades/period
+- Shogun: $39.99/month — 2,500 grades/period
+Upgrade at gradewithkatana.com/dashboard
 
-  const userMessage = `Triage this email and draft a reply if appropriate:
+Common questions & correct answers:
+- "Does it work with Canvas?" → Yes, Canvas LMS / Instructure Canvas only (not Blackboard, Moodle, etc.)
+- "Does it work with all assignment types?" → Text and PDF submissions; media submissions (video/audio) are not currently supported
+- "Is my student data safe?" → Submissions are sent to Claude AI for grading and are not stored by Katana
+- "Can I customize the feedback?" → Yes — tone, length, strictness, and custom instructions are all adjustable in the extension settings
+- "How do I cancel?" → Log in at gradewithkatana.com/dashboard → account settings → cancel subscription
+- "When does my quota reset?" → Every 30 days from your signup date
+- "Can I upgrade mid-period?" → Yes, upgrades take effect immediately
+
+== YOUR JOB ==
+Classify each email into exactly one of three actions:
+
+AUTO_SEND — Reply immediately, no human review needed. Use for:
+- Questions clearly answered by the information above (pricing, how it works, installation, compatibility, cancellation)
+- General curiosity / pre-sales questions
+- Simple "thank you" emails that warrant a brief acknowledgment
+- IMPORTANT: Only use auto_send when you are confident the answer is complete and accurate.
+  If you are uncertain about any detail, use needs_attention instead.
+
+NEEDS_ATTENTION — Stage a draft reply + flag for human review. Use for:
+- Refund or billing dispute requests
+- Reports of bugs or unexpected behavior
+- Account access issues (can't log in, subscription not updating)
+- Feature requests or partnership inquiries
+- Complaints or frustrated users
+- Anything where the correct answer is unclear or requires judgment
+- Any email where getting it wrong would be costly
+
+SKIP — Take no action. Use for:
+- Automated notifications (Google Workspace, billing receipts, security alerts)
+- Marketing emails, newsletters, promotional content
+- Delivery receipts, read notifications
+- Any email where a reply would be unwanted or inappropriate
+
+== OUTPUT FORMAT ==
+Respond ONLY with valid JSON — no explanation, no markdown fences.
+
+For auto_send:
+{"action":"auto_send","draft":"<full reply body — start with greeting e.g. Hi [Name], — sign off as The Katana Team>"}
+
+For needs_attention:
+{"action":"needs_attention","reason":"<one sentence — why this needs human review>","draft":"<draft reply body for the human to edit before sending>"}
+
+For skip:
+{"action":"skip","reason":"<one sentence — why no reply is needed>"}
+
+Tone for all replies: Professional, warm, and concise. Address the person by first name if available.`;
+
+  const userMessage = `Triage this email:
 
 From: ${senderDisplay}
 Subject: ${Subject}
 
 ${emailBody}`;
 
-  let draftBody: string;
+  type TriageResult =
+    | { action: 'auto_send';       draft: string }
+    | { action: 'needs_attention'; reason: string; draft: string }
+    | { action: 'skip';            reason: string };
+
+  let triage: TriageResult;
   try {
     const response = await anthropic.messages.create({
       model:      'claude-sonnet-4-6',
@@ -179,33 +272,49 @@ ${emailBody}`;
     const rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
     if (!rawText) throw new Error('Claude returned empty response.');
 
-    const jsonText = rawText.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-    const parsed = JSON.parse(jsonText) as { needs_reply: boolean; reason?: string; draft?: string };
-
-    if (!parsed.needs_reply) {
-      console.log(`email/inbound: skipping draft — ${parsed.reason} (from: ${From}, subject: "${Subject}")`);
-      return NextResponse.json({ skipped: true, reason: parsed.reason });
-    }
-
-    draftBody = parsed.draft || '';
-    if (!draftBody) throw new Error('Claude indicated reply needed but draft was empty.');
+    triage = JSON.parse(rawText.trim()) as TriageResult;
   } catch (err) {
-    console.error('email/inbound: Claude error', err);
-    return NextResponse.json({ error: 'AI draft generation failed.' }, { status: 500 });
+    console.error('email/inbound: Claude/parse error', err);
+    return NextResponse.json({ error: 'AI triage failed.' }, { status: 500 });
   }
 
-  // 5. Create Gmail draft (never auto-sends)
-  try {
-    const accessToken    = await getGmailAccessToken();
-    const replySubject   = Subject.startsWith('Re:') ? Subject : `Re: ${Subject}`;
-    const raw            = buildRawMime({
-      to:         replyToAddress,
-      subject:    replySubject,
-      body:       draftBody,
-      inReplyTo:  MessageID,
-      references: MessageID,
-    });
+  // 5. Act on Claude's decision
+  if (triage.action === 'skip') {
+    console.log(`email/inbound: skip — ${triage.reason} (from: ${From}, subject: "${Subject}")`);
+    return NextResponse.json({ action: 'skip', reason: triage.reason });
+  }
 
+  const replySubject = Subject.startsWith('Re:') ? Subject : `Re: ${Subject}`;
+
+  let accessToken: string;
+  try {
+    accessToken = await getGmailAccessToken();
+  } catch (err) {
+    console.error('email/inbound: failed to get Gmail access token', err);
+    return NextResponse.json({ error: 'Gmail authentication failed.' }, { status: 500 });
+  }
+
+  const raw = buildRawMime({
+    to:         replyToAddress,
+    subject:    replySubject,
+    body:       triage.draft,
+    inReplyTo:  MessageID,
+    references: MessageID,
+  });
+
+  if (triage.action === 'auto_send') {
+    try {
+      await sendGmailMessage(accessToken, raw);
+      console.log(`email/inbound: auto-sent reply to ${replyToAddress} re: "${Subject}"`);
+    } catch (err) {
+      console.error('email/inbound: Gmail send error', err);
+      return NextResponse.json({ error: 'Failed to send reply.' }, { status: 500 });
+    }
+    return NextResponse.json({ action: 'auto_send' });
+  }
+
+  // needs_attention: create draft + label the original inbox thread
+  try {
     await createGmailDraft(accessToken, raw);
     console.log(`email/inbound: draft created for "${Subject}" from ${replyToAddress}`);
   } catch (err) {
@@ -213,7 +322,16 @@ ${emailBody}`;
     return NextResponse.json({ error: 'Failed to create Gmail draft.' }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  try {
+    const labelId = await getOrCreateLabel(accessToken, NEEDS_ATTENTION_LABEL);
+    await labelInboundThread(accessToken, MessageID, labelId);
+    console.log(`email/inbound: "${NEEDS_ATTENTION_LABEL}" label applied — ${triage.reason}`);
+  } catch (err) {
+    // Label failure is non-fatal — the draft is already created
+    console.warn('email/inbound: label step failed (non-fatal)', err);
+  }
+
+  return NextResponse.json({ action: 'needs_attention', reason: triage.reason });
 }
 
 // ── Postmark inbound payload (relevant fields only) ────────────────────────
