@@ -416,6 +416,20 @@ If PRIOR CONVERSATION is present in the user message, use it to understand conte
 
 Tone for all replies: Professional, warm, and concise. Address the person by first name if available.`;
 
+  // 5a. Fetch Gmail access token + thread context before calling Claude
+  //     so we can include conversation history in the prompt.
+  let accessToken: string;
+  try {
+    accessToken = await getGmailAccessToken();
+  } catch (err) {
+    console.error('email/inbound: failed to get Gmail access token', err);
+    return NextResponse.json({ error: 'Gmail authentication failed.' }, { status: 500 });
+  }
+
+  const threadId         = await findGmailThreadId(accessToken, MessageID);
+  const threadHistory    = threadId ? await fetchThreadHistory(accessToken, threadId) : [];
+  const threadHistoryStr = formatThreadHistory(threadHistory);
+
   const userMessage = [
     'Triage this email:',
     '',
@@ -461,23 +475,6 @@ Tone for all replies: Professional, warm, and concise. Address the person by fir
 
   const replySubject = Subject.startsWith('Re:') ? Subject : `Re: ${Subject}`;
   const draft        = normalizeLineBreaks(triage.draft);
-
-  let accessToken: string;
-  try {
-    accessToken = await getGmailAccessToken();
-  } catch (err) {
-    console.error('email/inbound: failed to get Gmail access token', err);
-    return NextResponse.json({ error: 'Gmail authentication failed.' }, { status: 500 });
-  }
-
-  // Find the Gmail thread ID for the original email so we can explicitly thread
-  // the reply/draft with it — prevents the sent message appearing as a new conversation.
-  const threadId = await findGmailThreadId(accessToken, MessageID);
-
-  // Fetch prior messages in this thread so Claude has conversation context.
-  // Empty array if this is the first message or the fetch fails.
-  const threadHistory    = threadId ? await fetchThreadHistory(accessToken, threadId) : [];
-  const threadHistoryStr = formatThreadHistory(threadHistory);
 
   const raw = buildRawMime({
     to:         replyToAddress,
