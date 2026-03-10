@@ -124,18 +124,18 @@ async function getOrCreateLabel(accessToken: string, labelName: string): Promise
 
 // Search Gmail for the original inbound email by its RFC 2822 Message-ID.
 // Returns the Gmail threadId so it can be reused for threading AND labeling.
+// in:anywhere ensures we find it even if it landed in spam.
 async function findGmailThreadId(accessToken: string, messageId: string): Promise<string | null> {
   const searchId = messageId.startsWith('<') ? messageId : `<${messageId}>`;
+  const q        = `rfc822msgid:${searchId} in:anywhere`;
   const res = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(`rfc822msgid:${searchId}`)}`,
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}`,
     { headers: { 'Authorization': `Bearer ${accessToken}` } }
   );
   const { messages = [] } = await res.json() as { messages?: { id: string; threadId: string }[] };
-  if (!messages.length) {
-    console.warn(`email/inbound: Gmail thread not found for Message-ID ${messageId}`);
-    return null;
-  }
-  return messages[0].threadId;
+  const threadId = messages[0]?.threadId ?? null;
+  console.log(`email/inbound: findGmailThreadId → ${threadId ?? 'NOT FOUND'} (msgid: ${messageId})`);
+  return threadId;
 }
 
 async function applyLabelToThread(accessToken: string, threadId: string, labelId: string): Promise<void> {
@@ -152,27 +152,42 @@ async function applyLabelToThread(accessToken: string, threadId: string, labelId
   }
 }
 
-// Convert Claude's plain text draft to simple HTML.
-// Switching from text/plain to text/html eliminates Gmail's fixed-width
-// rendering and gives us proper paragraph spacing and list formatting.
+// Strip markdown characters that Claude sometimes outputs despite instructions.
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, '')               // fenced code blocks
+    .replace(/`([^`]+)`/g, '$1')                   // inline code
+    .replace(/\*\*(.+?)\*\*/gs, '$1')              // **bold**
+    .replace(/__(.+?)__/gs, '$1')                  // __bold__
+    .replace(/\*(?!\*)([^*\n]+)\*(?!\*)/g, '$1')  // *italic*
+    .replace(/_(?!_)([^_\n]+)_(?!_)/g, '$1')      // _italic_
+    .replace(/^#{1,6}\s+(.+)$/gm, '$1')            // ## headers → plain text
+    .replace(/^[ \t]*[-*+][ \t]+/gm, '• ')        // - bullet lists → bullet char
+    .replace(/^[-*_]{3,}\s*$/gm, '')               // horizontal rules
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// Convert plain text draft to HTML for email.
+// Gmail strips <html>/<body> tags and their styles, so we put all styling
+// on the inner <p> elements. No max-width — let Gmail's pane determine width.
 function textToHtml(text: string): string {
-  const escaped = text
+  const clean = stripMarkdown(text);
+
+  const escaped = clean
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  const paragraphs = escaped
+  return escaped
     .split(/\n{2,}/)
-    .map(para => `<p style="margin:0 0 14px 0;line-height:1.6">${para.replace(/\n/g, '<br>')}</p>`)
+    .map(para => {
+      const content = para.replace(/\n/g, '<br>').trim();
+      if (!content) return '';
+      return `<p style="margin:0 0 16px 0;line-height:1.6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;color:#222">${content}</p>`;
+    })
+    .filter(Boolean)
     .join('');
-
-  return [
-    '<html><body style="font-family:-apple-system,BlinkMacSystemFont,',
-    "'Segoe UI',Arial,sans-serif;font-size:15px;color:#1a1a1a;",
-    'max-width:600px;margin:0;padding:0">',
-    paragraphs,
-    '</body></html>',
-  ].join('');
 }
 
 // ── Thread history ─────────────────────────────────────────────────────────
@@ -430,7 +445,9 @@ For skip:
 
 If PRIOR CONVERSATION is present in the user message, use it to understand context — the customer may be following up on a previous issue, clarifying something, or escalating. Reference prior context naturally in your reply where relevant (e.g. "As we mentioned earlier…" or "Following up on your question about…").
 
-Tone for all replies: Professional, warm, and concise. Address the person by first name if available.`;
+Tone for all replies: Professional, warm, and concise. Address the person by first name if available.
+
+FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound signs for headers, no backticks, no dashes for bullet lists. Use numbered lists (1. 2. 3.) sparingly if needed. Write as if composing an email, not a document.`;
 
   // 5a. Fetch Gmail access token + thread context before calling Claude
   //     so we can include conversation history in the prompt.
