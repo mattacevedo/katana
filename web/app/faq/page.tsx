@@ -21,11 +21,6 @@ export default function FaqPage() {
         <h1 className={styles.title}>FAQ</h1>
         <p className={styles.meta}>gradewithkatana.com</p>
 
-        <div className={styles.highlight}>
-          <strong>More content coming soon.</strong> This page will answer your most common
-          questions about Katana — how it works, what it reads, and what you can trust it to do.
-        </div>
-
         <section className={styles.section}>
           <h2>What is Katana?</h2>
           <p>
@@ -59,6 +54,42 @@ export default function FaqPage() {
           <h2>What browsers are supported?</h2>
           <p>
             Google Chrome is required. Firefox and Safari support is on the roadmap.
+          </p>
+        </section>
+
+        <section className={styles.section}>
+          <h2>Does Katana work with Blackboard or Brightspace?</h2>
+          <p>
+            Not yet — Katana is currently built exclusively for Canvas SpeedGrader.
+            If there&apos;s enough demand for other LMS platforms, we&apos;ll consider adding support.
+            Let us know at{' '}
+            <a href="mailto:hello@gradewithkatana.com">hello@gradewithkatana.com</a> if
+            that&apos;s something you&apos;d find useful.
+          </p>
+        </section>
+
+        <section className={styles.section}>
+          <h2>Does Katana support using AI to replace the instructor&apos;s judgment?</h2>
+          <p>
+            Absolutely not — and that&apos;s not what we built it for.
+            Katana is a <strong>starting point</strong>, not a replacement.
+            It drafts a grade and feedback that reflects your rubric and your voice,
+            so you spend less time on the mechanical parts of grading and more time
+            on the parts that actually require your expertise.
+          </p>
+          <p>
+            Katana never submits anything to Canvas on its own.
+            Every grade goes through you first. We actively encourage instructors
+            to read, edit, and personalize each AI-generated response before hitting Submit.
+          </p>
+        </section>
+
+        <section className={styles.section}>
+          <h2>Does Katana automatically submit grades to Canvas?</h2>
+          <p>
+            No — and that&apos;s by design. Katana fills in the grade, rubric ratings,
+            and feedback as a draft for you to review. The Submit button in Canvas
+            is always the instructor&apos;s to click. You are in control at every step.
           </p>
         </section>
 
