@@ -6,6 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminClient } from '../../../lib/supabase/admin';
+import { Redis } from '@upstash/redis';
+import { Ratelimit } from '@upstash/ratelimit';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -21,6 +23,27 @@ const PLAN_LIMITS: Record<string, number> = {
 const ALLOWED_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-5']);
 const ALLOWED_MIME_TYPES = new Set(['application/pdf']);
 const MAX_CUSTOM_INSTRUCTIONS = 1000; // chars
+
+// ─── Rate limiter (Upstash Redis) ─────────────────────────────────────────
+// Activates only when env vars are present so the app degrades gracefully
+// if Redis isn't configured yet. Set UPSTASH_REDIS_REST_URL and
+// UPSTASH_REDIS_REST_TOKEN in Vercel to enable.
+//
+// Limits: 20 grading requests per user per 10 minutes.
+// This is well above normal usage but stops token-exhaustion abuse.
+const ratelimit = (
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+)
+  ? new Ratelimit({
+      redis: new Redis({
+        url:   process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      }),
+      limiter: Ratelimit.slidingWindow(20, '10 m'),
+      analytics: false,
+      prefix: 'katana:rl',
+    })
+  : null;
 
 export async function POST(req: NextRequest) {
   // 1. Auth: validate Bearer token via Supabase
@@ -39,7 +62,27 @@ export async function POST(req: NextRequest) {
     return json({ error: 'Invalid or expired session. Please sign in again.' }, 401);
   }
 
-  // 2. Check quota: count grades used this billing period
+  // 2. Rate limit: 20 requests per user per 10 minutes (when Redis is configured)
+  if (ratelimit) {
+    const { success, limit: rlLimit, remaining: rlRemaining, reset: rlReset } = await ratelimit.limit(user.id);
+    if (!success) {
+      const retryAfterSecs = Math.ceil((rlReset - Date.now()) / 1000);
+      return new NextResponse(
+        JSON.stringify({ error: 'Too many requests. Please wait a moment before grading again.' }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': String(rlLimit),
+            'X-RateLimit-Remaining': String(rlRemaining),
+            'Retry-After': String(retryAfterSecs),
+          },
+        }
+      );
+    }
+  }
+
+  // 3. Check quota: count grades used this billing period
   const { data: profile } = await supabase
     .from('profiles')
     .select('plan, grades_this_period, period_start')
