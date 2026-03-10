@@ -22,6 +22,37 @@ export default function FaqPage() {
         <p className={styles.meta}>gradewithkatana.com</p>
 
         <section className={styles.section}>
+          <h2>Why use Katana?</h2>
+          <p>
+            Meaningful, substantive feedback is one of the most valuable things an instructor
+            can give a student. We&apos;ve all experienced the other kind — a number at the
+            top of the page with no explanation of what worked, what didn&apos;t, or how to
+            improve. That kind of feedback doesn&apos;t teach much.
+          </p>
+          <p>
+            The problem is that writing real feedback takes time — often more time than
+            instructors have, especially across large classes. Katana is built to close that
+            gap. It gives you a thoughtful first draft that reflects your rubric and your
+            grading standards, so you can focus your energy on refining and personalizing
+            rather than starting from scratch for every submission.
+          </p>
+        </section>
+
+        <section className={styles.section}>
+          <h2>What&apos;s the difference between the plans?</h2>
+          <p>
+            Only one thing: the number of submissions you can grade per month.
+            Every plan uses the same AI model, produces the same quality of feedback, and
+            has access to all of Katana&apos;s features. There are no premium tiers with
+            better results — we didn&apos;t think that would be fair.
+          </p>
+          <p>
+            The free plan (50 grades/month) works well for smaller classes or for trying
+            Katana out before committing. Paid plans are for instructors grading at higher volume.
+          </p>
+        </section>
+
+        <section className={styles.section}>
           <h2>What is Katana?</h2>
           <p>
             Katana is a Google Chrome extension that opens alongside Canvas SpeedGrader.
