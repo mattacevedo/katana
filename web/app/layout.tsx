@@ -50,21 +50,14 @@ export const metadata: Metadata = {
     title: 'Katana — AI Grading Assistant for Canvas SpeedGrader',
     description:
       'Grade essays and reports in Canvas SpeedGrader with one click. AI fills in the score, rubric ratings, and written feedback automatically. Built by university professors.',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'Katana — AI Grading Assistant for Canvas SpeedGrader',
-      },
-    ],
+    // og image auto-detected from app/opengraph-image.tsx
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Katana — AI Grading Assistant for Canvas SpeedGrader',
     description:
       'One click. AI grades the essay, fills in Canvas. You review and submit.',
-    images: ['/og-image.png'],
+    // twitter image auto-detected from app/opengraph-image.tsx
     creator: '@gradewithkatana',
   },
 };
