@@ -349,7 +349,8 @@ How it works:
 4. Claude AI generates a grade, rubric ratings, and written feedback
 5. Katana auto-fills all fields in Canvas — instructor reviews, edits if needed, and submits
 
-Supported submission types: text submissions, PDF file uploads
+Supported submission types: text submissions, PDF files, Word documents (.docx)
+Not supported: legacy Word .doc files, video/audio/image submissions
 Supported grading schemas: points, percentage, letter grade (A–F), GPA scale (4.0), pass/fail
 
 Installation:
@@ -366,7 +367,7 @@ Upgrade at gradewithkatana.com/dashboard
 
 Common questions & correct answers:
 - "Does it work with Canvas?" → Yes, Canvas LMS / Instructure Canvas only (not Blackboard, Moodle, etc.)
-- "Does it work with all assignment types?" → Text and PDF submissions; media submissions (video/audio) are not currently supported
+- "Does it work with all assignment types?" → Text, PDF, and Word (.docx) submissions are supported. Legacy .doc files and media submissions (video/audio/image) are not supported
 - "Is my student data safe?" → Submissions are sent to Claude AI for grading and are not stored by Katana
 - "Can I customize the feedback?" → Yes — tone, length, strictness, and custom instructions are all adjustable in the extension settings
 - "How do I cancel?" → Log in at gradewithkatana.com/dashboard → account settings → cancel subscription
