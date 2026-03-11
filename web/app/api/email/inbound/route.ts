@@ -468,6 +468,14 @@ export async function POST(req: NextRequest) {
   // We use this for In-Reply-To and References so mail clients thread correctly.
   const inboundMsgId = hdr('Message-ID') ?? MessageID;
 
+  console.log('[threading-debug]', JSON.stringify({
+    postmarkGuid:    MessageID,
+    headerMessageId: hdr('Message-ID'),
+    inboundMsgId,
+    inboundInReplyTo,
+    inboundReferences,
+  }));
+
   // 3. Hard-skip delivery failures and mail loops before calling Claude
   if (SKIP_SUBJECT_RE.test(Subject) || SKIP_SENDER_RE.test(From)) {
     console.log(`email/inbound: hard-skip (bounce/loop) from ${From}`);
@@ -585,6 +593,7 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
   }
 
   const threadId         = await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo);
+  console.log('[threading-debug] threadId resolved:', threadId);
   const threadHistory    = threadId ? await fetchThreadHistory(accessToken, threadId) : [];
   const threadHistoryStr = formatThreadHistory(threadHistory);
 
