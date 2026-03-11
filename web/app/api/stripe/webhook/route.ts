@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { stripe, planFromPriceId } from '../../../../lib/stripe';
 import { createAdminClient } from '../../../../lib/supabase/admin';
+import { logActivity } from '../../../../lib/logActivity';
 
 // Required: disable Next.js body parser so we get the raw bytes for sig verification
 export const config = { api: { bodyParser: false } };
@@ -87,6 +88,7 @@ export async function POST(req: NextRequest) {
           .eq('id', userId);
 
         console.log(`webhook: checkout.session.completed — user ${userId} → plan ${plan}`);
+        void logActivity('signup', `New ${plan} subscriber (user ${userId})`, { userId, plan });
         break;
       }
 
@@ -112,6 +114,7 @@ export async function POST(req: NextRequest) {
           .eq('id', userId);
 
         console.log(`webhook: subscription.updated — user ${userId} → plan ${plan}`);
+        void logActivity('upgrade', `Plan updated → ${plan} (user ${userId})`, { userId, plan });
         break;
       }
 
@@ -126,6 +129,7 @@ export async function POST(req: NextRequest) {
             .update({ plan: 'free', stripe_subscription_id: null })
             .eq('id', userId);
           console.log(`webhook: subscription.deleted — user ${userId} → free`);
+          void logActivity('cancel', `Subscription ended → free (user ${userId})`, { userId });
         } else {
           await syncPlanByCustomerId(supabase, subscription.customer as string, null);
         }
@@ -151,6 +155,7 @@ export async function POST(req: NextRequest) {
             .update({ plan: 'free' })
             .eq('id', userId);
           console.warn(`webhook: invoice.payment_failed — user ${userId} downgraded to free`);
+          void logActivity('payment_failed', `Payment failed → downgraded to free (user ${userId})`, { userId });
         } else {
           await syncPlanByCustomerId(supabase, subscription.customer as string, null);
         }

@@ -7,6 +7,7 @@ import { createClient as createServerClient } from '../../lib/supabase/server';
 import { createAdminClient } from '../../lib/supabase/admin';
 import Link from 'next/link';
 import styles from './admin.module.css';
+import ActivityLog from './ActivityLog';
 
 const PLAN_PRICES: Record<string, number> = {
   free:   0,
@@ -322,6 +323,12 @@ export default async function AdminPage() {
               </tbody>
             </table>
           </div>
+        </section>
+
+        {/* ── Live Activity Log ───────────────────────────────────────── */}
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Live Activity</h2>
+          <ActivityLog />
         </section>
 
         {/* ── Notes ──────────────────────────────────────────────────────── */}

@@ -25,9 +25,26 @@
 .banner[data-type="info"]    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
 
 /* ── Cancel UI ──────────────────────────────────────────────────────────── */
-.cancelNotice { font-size: 12px; color: #9ca3af; margin-top: 4px; }
-.cancelLink   { font-size: 12px; color: #9ca3af; text-decoration: none; margin-top: 8px; }
+.cancelPending { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.cancelNotice  { font-size: 12px; color: #9ca3af; }
+.cancelLink    { font-size: 12px; color: #9ca3af; text-decoration: none; margin-top: 8px; }
 .cancelLink:hover { color: #dc2626; text-decoration: underline; }
+
+.reactivateBtn {
+  display: inline-block;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+  text-align: center;
+}
+.reactivateBtn:hover { background: #dcfce7; }
 
 /* ── Order History ──────────────────────────────────────────────────────── */
 .orderSection { margin-top: 40px; }

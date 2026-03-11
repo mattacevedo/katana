@@ -61,7 +61,7 @@ async function fetchSubscriptionStatus(subscriptionId: string): Promise<Subscrip
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ upgraded?: string; cancelled?: string }>;
+  searchParams: Promise<{ upgraded?: string; cancelled?: string; reactivated?: string }>;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -92,7 +92,7 @@ export default async function DashboardPage({
       : Promise.resolve(null),
   ]);
 
-  const { cancelled, upgraded } = await searchParams;
+  const { cancelled, upgraded, reactivated } = await searchParams;
 
   return (
     <div className={styles.page}>
@@ -111,6 +111,11 @@ export default async function DashboardPage({
         {upgraded === '1' && (
           <div className={styles.banner} data-type="success">
             🎉 You&apos;re now on the {PLAN_DISPLAY[plan] ?? plan} plan. Enjoy the extra grades!
+          </div>
+        )}
+        {reactivated === '1' && (
+          <div className={styles.banner} data-type="success">
+            ✅ Your subscription has been reactivated — you&apos;re staying on the {PLAN_DISPLAY[plan] ?? plan} plan!
           </div>
         )}
         {cancelled === '1' && subStatus && (
@@ -135,10 +140,17 @@ export default async function DashboardPage({
               <Link href="/api/upgrade?plan=shogun" className={styles.upgradeLink}>Upgrade to Shogun →</Link>
             )}
 
-            {/* Cancellation notice or cancel link */}
+            {/* Cancellation notice + reactivate, or cancel link */}
             {subStatus?.cancelAtPeriodEnd ? (
-              <div className={styles.cancelNotice}>
-                Cancels {subStatus.periodEnd} — access continues until then
+              <div className={styles.cancelPending}>
+                <div className={styles.cancelNotice}>
+                  Cancels {subStatus.periodEnd} — access continues until then
+                </div>
+                <form action="/api/billing/reactivate" method="post">
+                  <button type="submit" className={styles.reactivateBtn}>
+                    Reactivate subscription
+                  </button>
+                </form>
               </div>
             ) : plan !== 'free' && (
               <Link href="/dashboard/cancel" className={styles.cancelLink}>Cancel subscription</Link>

@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminClient } from '../../../../lib/supabase/admin';
+import { logActivity } from '../../../../lib/logActivity';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -122,10 +123,9 @@ async function getOrCreateLabel(accessToken: string, labelName: string): Promise
   return created.id;
 }
 
-// Search Gmail for the original inbound email by its RFC 2822 Message-ID.
-// Returns the Gmail threadId so it can be reused for threading AND labeling.
-// in:anywhere ensures we find it even if it landed in spam.
-async function findGmailThreadId(accessToken: string, messageId: string): Promise<string | null> {
+// Search Gmail for a single RFC 2822 Message-ID and return the threadId.
+// in:anywhere ensures we find it even if it landed in spam or Sent.
+async function searchGmailByMsgId(accessToken: string, messageId: string): Promise<string | null> {
   const searchId = messageId.startsWith('<') ? messageId : `<${messageId}>`;
   const q        = `rfc822msgid:${searchId} in:anywhere`;
   const res = await fetch(
@@ -133,9 +133,42 @@ async function findGmailThreadId(accessToken: string, messageId: string): Promis
     { headers: { 'Authorization': `Bearer ${accessToken}` } }
   );
   const { messages = [] } = await res.json() as { messages?: { id: string; threadId: string }[] };
-  const threadId = messages[0]?.threadId ?? null;
-  console.log(`email/inbound: findGmailThreadId → ${threadId ?? 'NOT FOUND'} (msgid: ${messageId})`);
-  return threadId;
+  return messages[0]?.threadId ?? null;
+}
+
+// Find the Gmail threadId for an inbound email.
+//
+// Strategy 1: search by the inbound message's own Message-ID.
+//   Works when the inbound email has been delivered to the Gmail inbox
+//   (e.g. Postmark is configured to forward, or domain MX points elsewhere).
+//
+// Strategy 2 (fallback): search by inReplyTo — the Message-ID of the email
+//   the customer is replying to.  That message was sent by us via the Gmail
+//   API and lives in the Sent folder, so it's always findable even if the
+//   inbound email hasn't been indexed by Gmail yet (race condition).
+async function findGmailThreadId(
+  accessToken: string,
+  messageId:   string,
+  inReplyTo?:  string | null,
+): Promise<string | null> {
+  // Strategy 1
+  const threadId = await searchGmailByMsgId(accessToken, messageId);
+  if (threadId) {
+    console.log(`email/inbound: thread found by MessageID → ${threadId}`);
+    return threadId;
+  }
+
+  // Strategy 2 — use In-Reply-To to locate the previous outbound message
+  if (inReplyTo) {
+    const fallback = await searchGmailByMsgId(accessToken, inReplyTo);
+    if (fallback) {
+      console.log(`email/inbound: thread found via In-Reply-To fallback → ${fallback}`);
+      return fallback;
+    }
+  }
+
+  console.log(`email/inbound: thread NOT FOUND (msgid: ${messageId})`);
+  return null;
 }
 
 async function applyLabelToThread(accessToken: string, threadId: string, labelId: string): Promise<void> {
@@ -347,8 +380,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 });
   }
 
-  const { From, FromName, Subject = '', TextBody, HtmlBody, MessageID, ReplyTo } = payload;
+  const { From, FromName, Subject = '', TextBody, HtmlBody, MessageID, ReplyTo, Headers = [] } = payload;
   const replyToAddress = ReplyTo || From;
+
+  // Extract threading headers from the inbound email.
+  // inboundInReplyTo: the Message-ID of the email the sender is replying to
+  //                   (i.e. our previous outbound — lives in Gmail Sent).
+  // inboundReferences: the full chain of prior Message-IDs.
+  const hdr = (name: string) =>
+    Headers.find(h => h.Name.toLowerCase() === name.toLowerCase())?.Value ?? null;
+  const inboundInReplyTo  = hdr('In-Reply-To');
+  const inboundReferences = hdr('References');
 
   // 3. Hard-skip delivery failures and mail loops before calling Claude
   if (SKIP_SUBJECT_RE.test(Subject) || SKIP_SENDER_RE.test(From)) {
@@ -459,7 +501,7 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
     return NextResponse.json({ error: 'Gmail authentication failed.' }, { status: 500 });
   }
 
-  const threadId         = await findGmailThreadId(accessToken, MessageID);
+  const threadId         = await findGmailThreadId(accessToken, MessageID, inboundInReplyTo);
   const threadHistory    = threadId ? await fetchThreadHistory(accessToken, threadId) : [];
   const threadHistoryStr = formatThreadHistory(threadHistory);
 
@@ -503,24 +545,33 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
   // 6. Act on Claude's decision
   if (triage.action === 'skip') {
     console.log(`email/inbound: skip — ${triage.reason} (from: ${From}, subject: "${Subject}")`);
+    void logActivity('email_skip', `Skipped from ${replyToAddress} — ${triage.reason}`, { from: From, subject: Subject });
     return NextResponse.json({ action: 'skip', reason: triage.reason });
   }
 
   const replySubject = Subject.startsWith('Re:') ? Subject : `Re: ${Subject}`;
   const draft        = textToHtml(triage.draft);
 
+  // Build the full References chain: take any existing References from the
+  // inbound email, append the inbound MessageID, and de-duplicate.
+  const outgoingReferences = [inboundReferences, MessageID]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
   const raw = buildRawMime({
     to:         replyToAddress,
     subject:    replySubject,
     body:       draft,
     inReplyTo:  MessageID,
-    references: MessageID,
+    references: outgoingReferences,
   });
 
   if (triage.action === 'auto_send') {
     try {
       await sendGmailMessage(accessToken, raw, threadId);
       console.log(`email/inbound: auto-sent reply to ${replyToAddress} re: "${Subject}" (thread: ${threadId ?? 'unknown'})`);
+      void logActivity('email_auto_send', `Auto-replied to ${replyToAddress} re: "${Subject}"`, { from: From, subject: Subject });
     } catch (err) {
       console.error('email/inbound: Gmail send error', err);
       return NextResponse.json({ error: 'Failed to send reply.' }, { status: 500 });
@@ -529,6 +580,7 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
   }
 
   // needs_attention: create draft + label the original inbox thread
+  void logActivity('email_needs_attention', `Flagged for review from ${replyToAddress} — ${triage.reason}`, { from: From, subject: Subject, reason: triage.reason });
   try {
     await createGmailDraft(accessToken, raw, threadId);
     console.log(`email/inbound: draft created for "${Subject}" from ${replyToAddress}`);
@@ -552,6 +604,8 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
 }
 
 // ── Postmark inbound payload (relevant fields only) ────────────────────────
+interface PostmarkHeader { Name: string; Value: string; }
+
 interface PostmarkInbound {
   From:      string;
   FromName:  string;
@@ -561,4 +615,5 @@ interface PostmarkInbound {
   TextBody?: string;
   HtmlBody?: string;
   MessageID: string;
+  Headers?:  PostmarkHeader[];
 }
