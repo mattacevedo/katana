@@ -8,6 +8,7 @@ import { createAdminClient } from '../../lib/supabase/admin';
 import Link from 'next/link';
 import styles from './admin.module.css';
 import ActivityLog from './ActivityLog';
+import EscalationSettings from './EscalationSettings';
 
 const PLAN_PRICES: Record<string, number> = {
   free:   0,
@@ -43,7 +44,8 @@ export default async function AdminPage() {
   if (!user) redirect('/auth/signin?next=/admin');
 
   const adminEmail = process.env.ADMIN_EMAIL || '';
-  if (!adminEmail || user.email !== adminEmail) redirect('/');
+  // Email comparison is case-insensitive per RFC 5321
+  if (!adminEmail || user.email?.toLowerCase() !== adminEmail.toLowerCase()) redirect('/');
 
   // ── Fetch all data with service role ──────────────────────────────────────
   const admin = createAdminClient();
@@ -58,6 +60,16 @@ export default async function AdminPage() {
   const { data: { users: authUsers = [] } } = await admin.auth.admin.listUsers({
     perPage: 1000,
   });
+
+  // Admin settings (escalation emails, etc.)
+  const { data: settingsRows = [] } = await admin
+    .from('admin_settings')
+    .select('key, value')
+    .catch(() => ({ data: [] as { key: string; value: string }[] }));
+  const adminSettings = Object.fromEntries(
+    (settingsRows ?? []).map((r: { key: string; value: string }) => [r.key, r.value])
+  );
+  const escalationEmails = adminSettings['escalation_emails'] ?? 'mattacevedo@gmail.com';
 
   // ── Build unified user list ───────────────────────────────────────────────
   const profileMap = new Map((profiles ?? []).map((p: Record<string, unknown>) => [p.id as string, p]));
@@ -342,6 +354,12 @@ export default async function AdminPage() {
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Live Activity</h2>
           <ActivityLog />
+        </section>
+
+        {/* ── Notifications settings ──────────────────────────────────── */}
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Notifications</h2>
+          <EscalationSettings initialEmails={escalationEmails} />
         </section>
 
         {/* ── Notes ──────────────────────────────────────────────────────── */}

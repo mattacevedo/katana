@@ -32,14 +32,22 @@ export async function GET(req: NextRequest) {
   }
 
   // Determine where to send the user after a successful exchange.
-  // Validate that `next` is a safe relative path: must start with / but NOT //
-  // (protocol-relative URLs like //evil.com would bypass a simple startsWith check).
-  const isSafePath = next.startsWith('/') && !next.startsWith('//');
-  const redirectTarget = isSafePath
-    ? `${origin}${next}`
-    : EXTENSION_ID
-      ? `${origin}/auth/extension-callback`
-      : `${origin}/dashboard`;
+  // Use URL constructor to resolve `next` against our own origin — this safely
+  // handles encoded tricks like %2F%2Fevil.com that bypass simple string checks.
+  // We only follow the redirect if it resolves to the same origin.
+  let redirectTarget: string;
+  if (next) {
+    try {
+      const resolved = new URL(next, origin);
+      redirectTarget = resolved.origin === origin
+        ? resolved.href
+        : (EXTENSION_ID ? `${origin}/auth/extension-callback` : `${origin}/dashboard`);
+    } catch {
+      redirectTarget = EXTENSION_ID ? `${origin}/auth/extension-callback` : `${origin}/dashboard`;
+    }
+  } else {
+    redirectTarget = EXTENSION_ID ? `${origin}/auth/extension-callback` : `${origin}/dashboard`;
+  }
 
   const response = NextResponse.redirect(redirectTarget);
 

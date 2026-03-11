@@ -125,6 +125,36 @@
 .logType    { font-weight: 600; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .logSummary { color: #d1d5db; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ── Settings box ─────────────────────────────────────────────────────── */
+.settingsBox {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+  padding: 20px 24px; margin-bottom: 36px;
+}
+.settingsRow {
+  display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap;
+}
+.settingsLeft  { flex: 1; min-width: 220px; }
+.settingsRight { flex: 2; min-width: 260px; display: flex; flex-direction: column; gap: 10px; }
+.settingsLabel { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
+.settingsHint  { font-size: 12px; color: #6b7280; line-height: 1.6; }
+.settingsTextarea {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid #d1d5db; border-radius: 8px; padding: 9px 12px;
+  font-size: 13px; font-family: ui-monospace, monospace; color: #374151;
+  resize: vertical; outline: none; line-height: 1.55;
+}
+.settingsTextarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.settingsActions  { display: flex; align-items: center; gap: 12px; }
+.settingsSaveBtn  {
+  background: #2563eb; color: #fff; border: none; border-radius: 7px;
+  padding: 8px 20px; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background 0.15s;
+}
+.settingsSaveBtn:hover:not(:disabled)  { background: #1d4ed8; }
+.settingsSaveBtn:disabled { opacity: 0.6; cursor: default; }
+.settingsSavedMsg { font-size: 13px; color: #059669; font-weight: 600; }
+.settingsErrMsg   { font-size: 13px; color: #dc2626; font-weight: 600; }
+
 /* ── Notes ────────────────────────────────────────────────────────────── */
 .noteBox {
   background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px;

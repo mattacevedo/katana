@@ -363,6 +363,75 @@ function formatAccountContext(account: AccountInfo | null): string {
   ].join('\n');
 }
 
+// ── Escalation notifications ───────────────────────────────────────────────
+
+// Basic RFC 5321 email format check — prevents header injection and invalid addresses.
+const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+
+// Read the comma/semicolon-separated escalation_emails setting from Supabase.
+// Each address is validated before being returned to prevent header injection.
+async function getEscalationEmails(): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'escalation_emails')
+      .single();
+    if (error || !data?.value) return [];
+    return data.value
+      .split(/[,;]/)
+      .map((e: string) => e.trim())
+      .filter((e: string) => e.length > 0 && e.length <= 254 && EMAIL_RE.test(e));
+  } catch {
+    return [];
+  }
+}
+
+// Send a brief escalation notification email via Gmail to each recipient.
+async function sendEscalationNotification(params: {
+  accessToken:    string;
+  toAddresses:    string[];
+  fromName:       string;
+  fromEmail:      string;
+  originalSubject:string;
+  preview:        string;
+  reason:         string;
+}): Promise<void> {
+  const { accessToken, toAddresses, fromName, fromEmail, originalSubject, preview, reason } = params;
+  if (!toAddresses.length) return;
+
+  const notifText = [
+    `A customer email has been flagged for your review.`,
+    ``,
+    `From:    ${fromName ? `${fromName} <${fromEmail}>` : fromEmail}`,
+    `Subject: ${originalSubject}`,
+    ``,
+    `Reason flagged: ${reason}`,
+    ``,
+    `Preview:`,
+    preview.slice(0, 400) + (preview.length > 400 ? '…' : ''),
+    ``,
+    `→ Review and send the draft in Gmail: https://mail.google.com`,
+    ``,
+    `— Katana Admin`,
+  ].join('\n');
+
+  const raw = buildRawMime({
+    to:      toAddresses.join(', '),
+    subject: `[Katana] 🔴 Escalation: ${originalSubject}`,
+    body:    textToHtml(notifText),
+  });
+
+  try {
+    await sendGmailMessage(accessToken, raw, null);
+    console.log(`email/inbound: escalation notification sent to ${toAddresses.join(', ')}`);
+  } catch (err) {
+    // Non-fatal — draft was already created even if notification fails
+    console.warn('email/inbound: escalation notification failed (non-fatal)', err);
+  }
+}
+
 // ── Main handler ───────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -391,6 +460,13 @@ export async function POST(req: NextRequest) {
     Headers.find(h => h.Name.toLowerCase() === name.toLowerCase())?.Value ?? null;
   const inboundInReplyTo  = hdr('In-Reply-To');
   const inboundReferences = hdr('References');
+
+  // RFC 2822 Message-ID of the inbound email.
+  // IMPORTANT: Postmark's top-level `MessageID` field is their own internal
+  // tracking GUID (not an RFC 2822 Message-ID). The actual email Message-ID
+  // (e.g. <abc123@gmail.com>) is in the Headers array under "Message-ID".
+  // We use this for In-Reply-To and References so mail clients thread correctly.
+  const inboundMsgId = hdr('Message-ID') ?? MessageID;
 
   // 3. Hard-skip delivery failures and mail loops before calling Claude
   if (SKIP_SUBJECT_RE.test(Subject) || SKIP_SENDER_RE.test(From)) {
@@ -477,10 +553,10 @@ SKIP — Take no action. Use for:
 Respond ONLY with valid JSON — no explanation, no markdown fences.
 
 For auto_send:
-{"action":"auto_send","draft":"<full reply body — start with greeting e.g. Hi [Name], — sign off as The Katana Team>"}
+{"action":"auto_send","draft":"<full reply body — start with greeting e.g. Hi [Name], — end with a sign-off on its own line, exactly:\n\nBest,\nNaomi\nCustomer Success Advocate\nThe Katana Team>"}
 
 For needs_attention:
-{"action":"needs_attention","reason":"<one sentence — why this needs human review>","draft":"<draft reply body for the human to edit before sending>"}
+{"action":"needs_attention","reason":"<one sentence — why this needs human review>","draft":"<draft reply body for the human to edit before sending — end with:\n\nBest,\nNaomi\nCustomer Success Advocate\nThe Katana Team>"}
 
 For skip:
 {"action":"skip","reason":"<one sentence — why no reply is needed>"}
@@ -488,6 +564,13 @@ For skip:
 If PRIOR CONVERSATION is present in the user message, use it to understand context — the customer may be following up on a previous issue, clarifying something, or escalating. Reference prior context naturally in your reply where relevant (e.g. "As we mentioned earlier…" or "Following up on your question about…").
 
 Tone for all replies: Professional, warm, and concise. Address the person by first name if available.
+
+SIGNATURE: Every draft (auto_send and needs_attention) must end with this exact sign-off block, separated from the body by a blank line:
+
+Best,
+Naomi
+Customer Success Advocate
+The Katana Team
 
 FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound signs for headers, no backticks, no dashes for bullet lists. Use numbered lists (1. 2. 3.) sparingly if needed. Write as if composing an email, not a document.`;
 
@@ -501,7 +584,7 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
     return NextResponse.json({ error: 'Gmail authentication failed.' }, { status: 500 });
   }
 
-  const threadId         = await findGmailThreadId(accessToken, MessageID, inboundInReplyTo);
+  const threadId         = await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo);
   const threadHistory    = threadId ? await fetchThreadHistory(accessToken, threadId) : [];
   const threadHistoryStr = formatThreadHistory(threadHistory);
 
@@ -552,18 +635,31 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
   const replySubject = Subject.startsWith('Re:') ? Subject : `Re: ${Subject}`;
   const draft        = textToHtml(triage.draft);
 
-  // Build the full References chain: take any existing References from the
-  // inbound email, append the inbound MessageID, and de-duplicate.
-  const outgoingReferences = [inboundReferences, MessageID]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  // Build the full References chain so both our Gmail and the recipient's mail
+  // client can correctly thread this reply into the existing conversation.
+  //
+  // We collect every known Message-ID from the thread in chronological order:
+  //   inboundReferences — the chain of prior IDs from the inbound email
+  //                       (may be null if Postmark doesn't forward this header)
+  //   inboundInReplyTo  — direct parent (our previous outbound, always in Sent)
+  //   inboundMsgId      — the inbound email the customer just sent us
+  //
+  // Including inboundInReplyTo as a fallback ensures threading even when
+  // Postmark omits the References header from the webhook payload.
+  const outgoingReferences = [
+    ...(inboundReferences ? inboundReferences.split(/\s+/) : []),
+    inboundInReplyTo,
+    inboundMsgId,
+  ]
+    .filter((id): id is string => Boolean(id))
+    .filter((id, i, arr) => arr.indexOf(id) === i) // deduplicate
+    .join(' ');
 
   const raw = buildRawMime({
     to:         replyToAddress,
     subject:    replySubject,
     body:       draft,
-    inReplyTo:  MessageID,
+    inReplyTo:  inboundMsgId,   // RFC 2822 Message-ID of the email we're replying to
     references: outgoingReferences,
   });
 
@@ -599,6 +695,26 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
     // Label failure is non-fatal — the draft is already created
     console.warn('email/inbound: label step failed (non-fatal)', err);
   }
+
+  // Send escalation notification emails (non-blocking, non-fatal)
+  void (async () => {
+    try {
+      const escalationAddresses = await getEscalationEmails();
+      if (escalationAddresses.length) {
+        await sendEscalationNotification({
+          accessToken,
+          toAddresses:     escalationAddresses,
+          fromName:        FromName,
+          fromEmail:       replyToAddress,
+          originalSubject: Subject,
+          preview:         emailBody,
+          reason:          (triage as { reason: string }).reason,
+        });
+      }
+    } catch (err) {
+      console.warn('email/inbound: escalation notification failed (non-fatal)', err);
+    }
+  })();
 
   return NextResponse.json({ action: 'needs_attention', reason: triage.reason });
 }

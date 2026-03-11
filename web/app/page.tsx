@@ -88,7 +88,7 @@ export default async function LandingPage() {
         )}
         <p className={styles.heroNote}>
           {COMING_SOON
-            ? 'Join the waitlist — sign up below to be first to know when we launch.'
+            ? 'Launching soon — email us at hello@gradewithkatana.com to get early access.'
             : '50 grades/month · No credit card required · Works in minutes'}
         </p>
         <p className={styles.heroAudience}>

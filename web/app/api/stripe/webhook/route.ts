@@ -19,6 +19,7 @@ import Stripe from 'stripe';
 import { stripe, planFromPriceId } from '../../../../lib/stripe';
 import { createAdminClient } from '../../../../lib/supabase/admin';
 import { logActivity } from '../../../../lib/logActivity';
+import { Redis } from '@upstash/redis';
 
 // Required: disable Next.js body parser so we get the raw bytes for sig verification
 export const config = { api: { bodyParser: false } };
@@ -27,6 +28,27 @@ export const config = { api: { bodyParser: false } };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidUuid(v: string | undefined): v is string {
   return !!v && UUID_RE.test(v);
+}
+
+// ── Idempotency: deduplicate Stripe events via Upstash Redis ─────────────────
+// Stripe can deliver the same event more than once. We use SET NX (atomic
+// "set if not exists") with a 24-hour TTL so each event.id is processed at most
+// once. Gracefully degrades to no-dedup if Redis isn't configured yet.
+const redis = (
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+)
+  ? new Redis({
+      url:   process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+  : null;
+
+/** Returns true when this event ID was already processed (duplicate). */
+async function markEventSeen(eventId: string): Promise<boolean> {
+  if (!redis) return false; // Redis not configured — skip dedup
+  // SET NX returns 'OK' on first insert, null if the key already exists
+  const result = await redis.set(`katana:webhook:${eventId}`, '1', { nx: true, ex: 86400 });
+  return result === null; // null → duplicate
 }
 
 export async function POST(req: NextRequest) {
@@ -53,9 +75,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature.' }, { status: 400 });
   }
 
+  // ── 1b. Idempotency: skip already-processed events ────────────────────────
+  const isDuplicate = await markEventSeen(event.id);
+  if (isDuplicate) {
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
   const supabase = createAdminClient();
 
   // ── 2. Route events ───────────────────────────────────────────────────────
+  // Unhandled exceptions → 500 so Stripe retries (transient DB/network failures).
+  // Non-retryable logic errors (missing metadata, unknown customer) use `break`
+  // so we return 200 and log server-side — retrying won't help.
   try {
     switch (event.type) {
 
@@ -70,7 +101,7 @@ export async function POST(req: NextRequest) {
 
         if (!isValidUuid(userId)) {
           console.error('webhook: checkout.session.completed — missing or invalid supabase_user_id in metadata');
-          break;
+          break; // non-retryable — Stripe cannot fix missing metadata by retrying
         }
 
         // Retrieve the full subscription to get the price ID
@@ -78,7 +109,7 @@ export async function POST(req: NextRequest) {
         const priceId = subscription.items.data[0]?.price?.id;
         const plan = (priceId ? planFromPriceId(priceId) : null) || 'free';
 
-        await supabase
+        const { error: dbErr } = await supabase
           .from('profiles')
           .update({
             plan,
@@ -87,8 +118,10 @@ export async function POST(req: NextRequest) {
           })
           .eq('id', userId);
 
-        console.log(`webhook: checkout.session.completed — user ${userId} → plan ${plan}`);
-        void logActivity('signup', `New ${plan} subscriber (user ${userId})`, { userId, plan });
+        if (dbErr) throw new Error(`DB update failed: ${dbErr.message}`);
+
+        console.log(`webhook: checkout.session.completed — plan ${plan}`);
+        void logActivity('signup', `New ${plan} subscriber`, { plan });
         break;
       }
 
@@ -108,13 +141,15 @@ export async function POST(req: NextRequest) {
         const priceId = subscription.items.data[0]?.price?.id;
         const plan = (priceId ? planFromPriceId(priceId) : null) || 'free';
 
-        await supabase
+        const { error: dbErr } = await supabase
           .from('profiles')
           .update({ plan, stripe_subscription_id: subscription.id })
           .eq('id', userId);
 
-        console.log(`webhook: subscription.updated — user ${userId} → plan ${plan}`);
-        void logActivity('upgrade', `Plan updated → ${plan} (user ${userId})`, { userId, plan });
+        if (dbErr) throw new Error(`DB update failed: ${dbErr.message}`);
+
+        console.log(`webhook: subscription.updated — plan ${plan}`);
+        void logActivity('upgrade', `Plan updated → ${plan}`, { plan });
         break;
       }
 
@@ -124,12 +159,15 @@ export async function POST(req: NextRequest) {
         const userId = subscription.metadata?.supabase_user_id;
 
         if (isValidUuid(userId)) {
-          await supabase
+          const { error: dbErr } = await supabase
             .from('profiles')
             .update({ plan: 'free', stripe_subscription_id: null })
             .eq('id', userId);
-          console.log(`webhook: subscription.deleted — user ${userId} → free`);
-          void logActivity('cancel', `Subscription ended → free (user ${userId})`, { userId });
+
+          if (dbErr) throw new Error(`DB update failed: ${dbErr.message}`);
+
+          console.log('webhook: subscription.deleted → free');
+          void logActivity('cancel', 'Subscription ended → free', {});
         } else {
           await syncPlanByCustomerId(supabase, subscription.customer as string, null);
         }
@@ -150,12 +188,15 @@ export async function POST(req: NextRequest) {
         const userId = subscription.metadata?.supabase_user_id;
 
         if (isValidUuid(userId)) {
-          await supabase
+          const { error: dbErr } = await supabase
             .from('profiles')
             .update({ plan: 'free' })
             .eq('id', userId);
-          console.warn(`webhook: invoice.payment_failed — user ${userId} downgraded to free`);
-          void logActivity('payment_failed', `Payment failed → downgraded to free (user ${userId})`, { userId });
+
+          if (dbErr) throw new Error(`DB update failed: ${dbErr.message}`);
+
+          console.warn('webhook: invoice.payment_failed — downgraded to free');
+          void logActivity('payment_failed', 'Payment failed → downgraded to free', {});
         } else {
           await syncPlanByCustomerId(supabase, subscription.customer as string, null);
         }
@@ -167,8 +208,12 @@ export async function POST(req: NextRequest) {
         break;
     }
   } catch (err) {
-    console.error(`webhook: error processing event ${event.type}:`, err);
-    // Return 200 so Stripe doesn't retry — log and investigate manually
+    // Return 500 so Stripe retries — covers transient DB or network failures.
+    console.error(
+      `webhook: error processing event ${event.type}:`,
+      err instanceof Error ? err.message : String(err)
+    );
+    return NextResponse.json({ error: 'Internal error. Stripe will retry.' }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
@@ -176,19 +221,21 @@ export async function POST(req: NextRequest) {
 
 // ── Fallback: look up user by stripe_customer_id ──────────────────────────
 // Used when supabase_user_id isn't in subscription metadata (e.g. older subs).
+// Throws on DB error so the caller's try/catch returns 500 for Stripe to retry.
 async function syncPlanByCustomerId(
   supabase: ReturnType<typeof createAdminClient>,
   customerId: string,
   subscription: Stripe.Subscription | null
 ) {
-  const { data: profile } = await supabase
+  const { data: profile, error: lookupErr } = await supabase
     .from('profiles')
     .select('id')
     .eq('stripe_customer_id', customerId)
     .single();
 
-  if (!profile) {
-    console.error(`webhook: no profile found for customer ${customerId}`);
+  if (lookupErr || !profile) {
+    // Customer not found — non-retryable; log without exposing the customer ID
+    console.error('webhook: no profile found for Stripe customer');
     return;
   }
 
@@ -196,10 +243,12 @@ async function syncPlanByCustomerId(
     ? (planFromPriceId(subscription.items.data[0]?.price?.id) ?? 'free')
     : 'free';
 
-  await supabase
+  const { error: dbErr } = await supabase
     .from('profiles')
     .update({ plan, stripe_subscription_id: subscription?.id ?? null })
     .eq('id', profile.id);
 
-  console.log(`webhook: synced customer ${customerId} → plan ${plan}`);
+  if (dbErr) throw new Error(`DB update failed in syncPlanByCustomerId: ${dbErr.message}`);
+
+  console.log(`webhook: synced customer → plan ${plan}`);
 }

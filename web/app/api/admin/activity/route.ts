@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await serverSupabase.auth.getUser();
 
   const adminEmail = process.env.ADMIN_EMAIL ?? '';
-  if (!user || !adminEmail || user.email !== adminEmail) {
+  // Email comparison is case-insensitive per RFC 5321
+  if (!user || !adminEmail || user.email?.toLowerCase() !== adminEmail.toLowerCase()) {
     return new Response('Unauthorized', { status: 401 });
   }
 
@@ -54,12 +55,16 @@ export async function GET(req: NextRequest) {
             .limit(50);
 
           if (error) {
-            // Table may not exist yet — send a hint and stop polling noisily
             if (error.code === '42P01') {
+              // Table doesn't exist yet — inform the client and stop polling
               send({ __error: 'activity_log table not found — run the SQL migration in Supabase' });
-              closed = true;
-              try { controller.close(); } catch {}
+            } else {
+              // Any other DB error: log server-side but don't expose details to client
+              console.error('admin/activity SSE: DB error', error.code, error.message);
+              send({ __error: 'Database error — check server logs.' });
             }
+            closed = true;
+            try { controller.close(); } catch {}
             return;
           }
 

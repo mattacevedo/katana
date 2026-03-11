@@ -20,6 +20,26 @@
 
 import { createAdminClient } from './supabase/admin';
 
+// ── Metadata sanitizer ────────────────────────────────────────────────────────
+// Only persist known, safe keys to the activity_log metadata JSONB column.
+// This prevents callers from accidentally storing PII or large payloads.
+const METADATA_ALLOWLIST = new Set([
+  'plan', 'email', 'subject', 'messageId', 'from', 'to', 'action',
+]);
+
+function sanitizeMetadata(meta: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(meta)
+      .filter(([k]) => METADATA_ALLOWLIST.has(k))
+      .map(([k, v]) => {
+        // Coerce all values to primitives; truncate strings to 500 chars
+        if (typeof v === 'string') return [k, v.slice(0, 500)];
+        if (typeof v === 'number' || typeof v === 'boolean') return [k, v];
+        return [k, String(v).slice(0, 500)];
+      })
+  );
+}
+
 export type ActivityEventType =
   | 'email_auto_send'
   | 'email_needs_attention'
@@ -40,8 +60,8 @@ export async function logActivity(
     const admin = createAdminClient();
     await admin.from('activity_log').insert({
       event_type: eventType,
-      summary,
-      metadata: metadata ?? {},
+      summary:    summary.slice(0, 500), // cap summary length too
+      metadata:   metadata ? sanitizeMetadata(metadata) : {},
     });
   } catch (err) {
     // Non-fatal — activity log is best-effort

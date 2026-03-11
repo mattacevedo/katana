@@ -230,13 +230,9 @@
   /* Hero: tighter padding, smaller sub text */
   .hero { padding: 44px 20px 36px; }
   .heroSub { font-size: 15px; }
-  .demoWrapper { margin-top: 32px; }
 
-  /* Demo: hide the Canvas side entirely, show only the Katana panel */
-  .demoContent { grid-template-columns: 1fr; min-height: 0; }
-  .demoCanvas { display: none; }
-  .demoPanel { min-height: 300px; border-radius: 0; }
-  .demoCursor { display: none; }
+  /* Demo: hide entirely on mobile */
+  .demoWrapper { display: none; }
 
   /* Trust bar: hide dividers so items wrap cleanly */
   .trustDivider { display: none; }

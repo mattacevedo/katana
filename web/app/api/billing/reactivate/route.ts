@@ -9,6 +9,13 @@ import { getStripe } from '../../../../lib/stripe';
 import { logActivity } from '../../../../lib/logActivity';
 
 export async function POST(req: NextRequest) {
+  // ── CSRF guard: ensure the request originates from our own app ────────────
+  const requestOrigin = req.headers.get('origin');
+  const { origin: appOrigin } = new URL(req.url);
+  if (!requestOrigin || requestOrigin !== appOrigin) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -32,8 +39,8 @@ export async function POST(req: NextRequest) {
     await stripe.subscriptions.update(profile.stripe_subscription_id, {
       cancel_at_period_end: false,
     });
-    console.log(`billing/reactivate: user ${user.id} — cancel_at_period_end cleared on ${profile.stripe_subscription_id}`);
-    void logActivity('reactivate', `Subscription reactivated on ${profile.plan} plan (user ${user.id})`, { userId: user.id, plan: profile.plan });
+    console.log('billing/reactivate: cancel_at_period_end cleared');
+    void logActivity('reactivate', `Subscription reactivated on ${profile.plan} plan`, { plan: profile.plan });
     return NextResponse.redirect(new URL('/dashboard?reactivated=1', req.url));
   } catch (err) {
     console.error('billing/reactivate: Stripe error', err);

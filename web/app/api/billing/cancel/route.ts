@@ -10,6 +10,13 @@ import { createClient } from '../../../../lib/supabase/server';
 import { getStripe } from '../../../../lib/stripe';
 
 export async function POST(req: NextRequest) {
+  // ── CSRF guard: ensure the request originates from our own app ────────────
+  const requestOrigin = req.headers.get('origin');
+  const { origin: appOrigin } = new URL(req.url);
+  if (!requestOrigin || requestOrigin !== appOrigin) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -33,7 +40,7 @@ export async function POST(req: NextRequest) {
     await stripe.subscriptions.update(profile.stripe_subscription_id, {
       cancel_at_period_end: true,
     });
-    console.log(`billing/cancel: user ${user.id} — cancel_at_period_end set on ${profile.stripe_subscription_id}`);
+    console.log('billing/cancel: cancel_at_period_end set');
     return NextResponse.redirect(new URL('/dashboard?cancelled=1', req.url));
   } catch (err) {
     console.error('billing/cancel: Stripe error', err);

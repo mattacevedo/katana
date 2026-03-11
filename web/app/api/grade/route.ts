@@ -22,8 +22,12 @@ const PLAN_LIMITS: Record<string, number> = {
 // ─── Allowlists ───────────────────────────────────────────────────────────
 const ALLOWED_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-5']);
 const ALLOWED_MIME_TYPES = new Set(['application/pdf']);
-const MAX_CUSTOM_INSTRUCTIONS = 1000; // chars
-const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB per attachment
+const MAX_CUSTOM_INSTRUCTIONS  = 1000;           // chars
+const MAX_FILE_BYTES           = 20 * 1024 * 1024; // 20 MB per attachment
+const MAX_ASSIGNMENT_TITLE     = 500;
+const MAX_STUDENT_NAME         = 200;
+const MAX_INSTRUCTIONS         = 50_000;
+const MAX_SUBMISSION_CONTENT   = 100_000;
 
 // ─── Rate limiter (Upstash Redis) ─────────────────────────────────────────
 // Activates only when env vars are present so the app degrades gracefully
@@ -47,6 +51,11 @@ const ratelimit = (
   : null;
 
 export async function POST(req: NextRequest) {
+  // 0. Content-Type guard
+  if (!req.headers.get('content-type')?.includes('application/json')) {
+    return json({ error: 'Content-Type must be application/json.' }, 415);
+  }
+
   // 1. Auth: validate Bearer token via Supabase
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -131,6 +140,25 @@ export async function POST(req: NextRequest) {
     if (byteLength > MAX_FILE_BYTES) {
       return json({ error: 'Attached file exceeds the 20 MB limit.' }, 400);
     }
+  }
+
+  // 4b. Length limits on unbounded text fields — prevent prompt-injection via
+  //     oversized payloads and protect the Claude context window / token budget.
+  if (submissionData?.assignmentTitle &&
+      submissionData.assignmentTitle.length > MAX_ASSIGNMENT_TITLE) {
+    return json({ error: `Assignment title must be ${MAX_ASSIGNMENT_TITLE} characters or fewer.` }, 400);
+  }
+  if (submissionData?.studentName &&
+      submissionData.studentName.length > MAX_STUDENT_NAME) {
+    return json({ error: `Student name must be ${MAX_STUDENT_NAME} characters or fewer.` }, 400);
+  }
+  if (submissionData?.assignmentInstructions &&
+      submissionData.assignmentInstructions.length > MAX_INSTRUCTIONS) {
+    return json({ error: `Assignment instructions must be ${MAX_INSTRUCTIONS.toLocaleString()} characters or fewer.` }, 400);
+  }
+  if (submissionData?.submission?.content &&
+      submissionData.submission.content.length > MAX_SUBMISSION_CONTENT) {
+    return json({ error: `Submission content must be ${MAX_SUBMISSION_CONTENT.toLocaleString()} characters or fewer.` }, 400);
   }
 
   // 4. Atomically claim one quota slot before calling Claude.
