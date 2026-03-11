@@ -31,6 +31,11 @@ const jsonLd = {
   author: { '@type': 'Organization', name: 'Tamahagane, LLC', url: 'https://www.gradewithkatana.com' },
 };
 
+// ── Coming-soon gate ───────────────────────────────────────────────────────
+// Set to false to re-enable all sign-up CTAs and go fully live.
+const COMING_SOON = true;
+// ──────────────────────────────────────────────────────────────────────────
+
 export default async function LandingPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -74,11 +79,17 @@ export default async function LandingPage() {
           and written feedback automatically. You review and submit. No IT department. No LTI setup or backend integration.
         </p>
 
-        <Link href="/auth/signin" className={styles.btnHero}>
-          Start Free
-        </Link>
+        {COMING_SOON ? (
+          <div className={styles.btnComingSoon}>Arriving March 2026</div>
+        ) : (
+          <Link href="/auth/signin" className={styles.btnHero}>
+            Start Free
+          </Link>
+        )}
         <p className={styles.heroNote}>
-          50 grades/month · No credit card required · Works in minutes
+          {COMING_SOON
+            ? 'Join the waitlist — sign up below to be first to know when we launch.'
+            : '50 grades/month · No credit card required · Works in minutes'}
         </p>
         <p className={styles.heroAudience}>
           For college, university, and K–12 educators · Requires Google Chrome
@@ -426,12 +437,18 @@ export default async function LandingPage() {
               <ul className={styles.planFeatures}>
                 {plan.features.map(f => <li key={f}>{f}</li>)}
               </ul>
-              <Link
-                href={plan.href}
-                className={plan.highlight ? styles.btnHero : styles.btnOutline}
-              >
-                {plan.cta}
-              </Link>
+              {COMING_SOON ? (
+                <div className={plan.highlight ? styles.btnComingSoonPrimary : styles.btnComingSoon}>
+                  Arriving March 2026
+                </div>
+              ) : (
+                <Link
+                  href={plan.href}
+                  className={plan.highlight ? styles.btnHero : styles.btnOutline}
+                >
+                  {plan.cta}
+                </Link>
+              )}
             </div>
           ))}
         </div>

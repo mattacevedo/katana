@@ -25,6 +25,9 @@
 .btnHero:hover { background: var(--blue-dark); text-decoration: none; }
 .btnOutline { display: inline-block; background: #fff; color: var(--navy); padding: 12px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; border: 2px solid var(--border); transition: border-color 0.15s; }
 .btnOutline:hover { border-color: var(--blue); text-decoration: none; }
+/* Coming-soon placeholders — same geometry as live buttons, non-interactive */
+.btnComingSoon { display: inline-block; background: #f3f4f6; color: #9ca3af; padding: 12px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; border: 2px solid #e5e7eb; cursor: default; text-align: center; }
+.btnComingSoonPrimary { display: inline-block; background: #dbeafe; color: #3b82f6; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: default; text-align: center; }
 
 /* ── Demo ─────────────────────────────────────────────────────────────── */
 .demoWrapper { margin: 48px auto 0; max-width: 860px; }
