@@ -174,6 +174,19 @@ export default async function AdminPage() {
             <div className={styles.kpiValue}>{fmtUsd(estimatedApiCost)}</div>
             <div className={styles.kpiSub}>~$0.009 / grade · margin {fmtUsd(mrr - estimatedApiCost)}/mo</div>
           </div>
+          <div className={styles.kpiCard}>
+            <div className={styles.kpiLabel}>Site Traffic</div>
+            <div className={styles.kpiValue} style={{ fontSize: 18, marginTop: 6 }}>GA4 Connected</div>
+            <div className={styles.kpiSub} style={{ marginBottom: 10 }}>ID: G-NY7S0Q3FSW</div>
+            <a
+              href="https://analytics.google.com/analytics/web/"
+              target="_blank"
+              rel="noreferrer"
+              className={styles.gaLink}
+            >
+              Open Google Analytics ↗
+            </a>
+          </div>
         </div>
 
         {/* ── Plan breakdown ─────────────────────────────────────────────── */}

@@ -2,11 +2,13 @@
 // Authenticated user dashboard — shows usage, plan, and billing link.
 
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import { createClient } from '../../lib/supabase/server';
 import Link from 'next/link';
 import styles from './dashboard.module.css';
 import { getStripe } from '../../lib/stripe';
 import type Stripe from 'stripe';
+import GaEvents from '../components/GaEvents';
 
 interface SubscriptionStatus {
   cancelAtPeriodEnd: boolean;
@@ -224,6 +226,11 @@ export default async function DashboardPage({
             </div>
           )}
         </section>
+
+        {/* GA conversion events — fires purchase/reactivate gtag events from URL params */}
+        <Suspense fallback={null}>
+          <GaEvents />
+        </Suspense>
       </main>
     </div>
   );
