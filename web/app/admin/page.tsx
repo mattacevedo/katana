@@ -61,13 +61,12 @@ export default async function AdminPage() {
     perPage: 1000,
   });
 
-  // Admin settings (escalation emails, etc.)
-  const { data: settingsRows = [] } = await admin
+  // Admin settings (escalation emails, etc.) — table may not exist yet; ignore errors
+  const { data: settingsRows, error: settingsErr } = await admin
     .from('admin_settings')
-    .select('key, value')
-    .catch(() => ({ data: [] as { key: string; value: string }[] }));
+    .select('key, value');
   const adminSettings = Object.fromEntries(
-    (settingsRows ?? []).map((r: { key: string; value: string }) => [r.key, r.value])
+    (!settingsErr && settingsRows ? settingsRows : []).map((r: { key: string; value: string }) => [r.key, r.value])
   );
   const escalationEmails = adminSettings['escalation_emails'] ?? 'mattacevedo@gmail.com';
 
