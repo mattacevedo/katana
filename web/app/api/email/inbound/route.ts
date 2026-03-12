@@ -171,6 +171,10 @@ async function searchGmailByMsgId(accessToken: string, messageId: string): Promi
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}`,
     { headers: { 'Authorization': `Bearer ${accessToken}` } }
   );
+  if (!res.ok) {
+    console.warn(`email/inbound: searchGmailByMsgId HTTP ${res.status} — ${await res.text()}`);
+    return null;
+  }
   const { messages = [] } = await res.json() as { messages?: { id: string; threadId: string }[] };
   return messages[0]?.threadId ?? null;
 }
@@ -217,14 +221,20 @@ async function findGmailThreadId(
   // Best called AFTER Claude finishes (~5-6 s after the webhook fires), giving
   // Gmail enough time to index the inbox copy before we search.
   if (fromEmail && subject) {
+    // Extract just the email address in case fromEmail is "Name <email>" format
+    const fromAddr    = fromEmail.match(/<([^>]+)>/)?.[1] ?? fromEmail;
     const cleanSubject = subject.replace(/^(Re:\s*)+/i, '').trim();
-    const q = `from:${fromEmail} subject:"${cleanSubject}" in:inbox newer_than:1d`;
+    const q = `from:${fromAddr} to:hello@gradewithkatana.com subject:"${cleanSubject}" newer_than:1d`;
+    console.log(`[threading-debug] Strategy 3 query: ${q}`);
     const res = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=1`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=3`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } },
     );
-    if (res.ok) {
+    if (!res.ok) {
+      console.warn(`email/inbound: Strategy 3 HTTP ${res.status} — ${await res.text()}`);
+    } else {
       const data = await res.json() as { messages?: { id: string; threadId: string }[] };
+      console.log(`[threading-debug] Strategy 3 results: ${data.messages?.length ?? 0} message(s)`);
       const found = data.messages?.[0]?.threadId ?? null;
       if (found) {
         console.log(`email/inbound: thread found by from+subject → ${found}`);

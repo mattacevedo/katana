@@ -13,8 +13,9 @@ import { NextResponse } from 'next/server';
 
 const REDIRECT_URI = 'https://www.gradewithkatana.com/api/email/oauth/callback';
 
-// gmail.compose = create drafts and send emails the user composed
-const SCOPES = ['https://www.googleapis.com/auth/gmail.compose'];
+// gmail.modify = read messages/threads/labels + create drafts + send emails
+// (superset of gmail.compose; needed for thread search, label management, and history)
+const SCOPES = ['https://www.googleapis.com/auth/gmail.modify'];
 
 export async function GET() {
   const params = new URLSearchParams({
