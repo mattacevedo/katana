@@ -850,25 +850,25 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
     console.warn('email/inbound: label step failed (non-fatal)', err);
   }
 
-  // Send escalation notification emails (non-blocking, non-fatal)
-  void (async () => {
-    try {
-      const escalationAddresses = await getEscalationEmails();
-      if (escalationAddresses.length) {
-        await sendEscalationNotification({
-          accessToken,
-          toAddresses:     escalationAddresses,
-          fromName:        FromName,
-          fromEmail:       replyToAddress,
-          originalSubject: Subject,
-          preview:         emailBody,
-          reason:          (triage as { reason: string }).reason,
-        });
-      }
-    } catch (err) {
-      console.warn('email/inbound: escalation notification failed (non-fatal)', err);
+  // Send escalation notification emails.
+  // Must be awaited — Vercel freezes the execution context on response return,
+  // so a fire-and-forget void block will never complete.
+  try {
+    const escalationAddresses = await getEscalationEmails();
+    if (escalationAddresses.length) {
+      await sendEscalationNotification({
+        accessToken,
+        toAddresses:     escalationAddresses,
+        fromName:        FromName,
+        fromEmail:       replyToAddress,
+        originalSubject: Subject,
+        preview:         emailBody,
+        reason:          (triage as { reason: string }).reason,
+      });
     }
-  })();
+  } catch (err) {
+    console.warn('email/inbound: escalation notification failed (non-fatal)', err);
+  }
 
   return NextResponse.json({ action: 'needs_attention', reason: triage.reason });
 }
