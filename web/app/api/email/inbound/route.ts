@@ -224,6 +224,62 @@ async function applyLabelToThread(accessToken: string, threadId: string, labelId
   }
 }
 
+// Preprocess Claude's JSON output before parsing.
+//
+// Problem: Claude sometimes emits literal newline / tab / other control
+// characters inside JSON string values.  JSON.parse() rejects these
+// (RFC 8259 §7 — control characters U+0000–U+001F must be escaped).
+// Claude's system-prompt example contains actual \n characters, so it
+// mirrors that pattern in the "draft" field.
+//
+// Solution: walk the raw text character-by-character and escape any bare
+// control characters that appear inside a JSON string literal.  We also
+// strip markdown code fences in case Claude wraps the JSON block.
+function extractAndCleanJson(raw: string): string {
+  let text = raw.trim();
+
+  // Strip ```json ... ``` or ``` ... ``` fences if present
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (fenceMatch) text = fenceMatch[1].trim();
+
+  // Escape bare control characters inside JSON string values
+  let inString = false;
+  let escaped  = false;
+  let result   = '';
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+
+    if (escaped) {
+      escaped = false;
+      result += ch;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escaped = true;
+      result += ch;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      result += ch;
+      continue;
+    }
+    if (inString) {
+      const code = ch.charCodeAt(0);
+      if (ch === '\n') { result += '\\n';  continue; }
+      if (ch === '\r') { result += '\\r';  continue; }
+      if (ch === '\t') { result += '\\t';  continue; }
+      if (code < 0x20) {
+        result += `\\u${code.toString(16).padStart(4, '0')}`;
+        continue;
+      }
+    }
+    result += ch;
+  }
+  return result;
+}
+
 // Strip markdown characters that Claude sometimes outputs despite instructions.
 function stripMarkdown(text: string): string {
   return text
@@ -678,7 +734,7 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
     const rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
     if (!rawText) throw new Error('Claude returned empty response.');
 
-    triage = JSON.parse(rawText.trim()) as TriageResult;
+    triage = JSON.parse(extractAndCleanJson(rawText)) as TriageResult;
   } catch (err) {
     console.error('email/inbound: Claude/parse error', err);
     return NextResponse.json({ error: 'AI triage failed.' }, { status: 500 });
