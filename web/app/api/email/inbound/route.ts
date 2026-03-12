@@ -542,14 +542,14 @@ async function sendEscalationNotification(params: {
     `Preview:`,
     preview.slice(0, 400) + (preview.length > 400 ? '…' : ''),
     ``,
-    `→ Review and send the draft in Gmail: https://mail.google.com`,
+    `Log into the Katana email to review and respond.`,
     ``,
     `— Katana Admin`,
   ].join('\n');
 
   const raw = buildRawMime({
     to:      toAddresses.join(', '),
-    subject: `[Katana] 🔴 Escalation: ${originalSubject}`,
+    subject: `[Katana] Escalation: ${originalSubject}`,
     body:    textToHtml(notifText),
   });
 
