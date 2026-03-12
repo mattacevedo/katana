@@ -225,7 +225,6 @@ async function findGmailThreadId(
     const fromAddr    = fromEmail.match(/<([^>]+)>/)?.[1] ?? fromEmail;
     const cleanSubject = subject.replace(/^(Re:\s*)+/i, '').trim();
     const q = `from:${fromAddr} to:hello@gradewithkatana.com subject:"${cleanSubject}" newer_than:1d`;
-    console.log(`[threading-debug] Strategy 3 query: ${q}`);
     const res = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=3`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } },
@@ -234,7 +233,6 @@ async function findGmailThreadId(
       console.warn(`email/inbound: Strategy 3 HTTP ${res.status} — ${await res.text()}`);
     } else {
       const data = await res.json() as { messages?: { id: string; threadId: string }[] };
-      console.log(`[threading-debug] Strategy 3 results: ${data.messages?.length ?? 0} message(s)`);
       const found = data.messages?.[0]?.threadId ?? null;
       if (found) {
         console.log(`email/inbound: thread found by from+subject → ${found}`);
@@ -600,14 +598,6 @@ export async function POST(req: NextRequest) {
   // We use this for In-Reply-To and References so mail clients thread correctly.
   const inboundMsgId = hdr('Message-ID') ?? MessageID;
 
-  console.log('[threading-debug]', JSON.stringify({
-    postmarkGuid:    MessageID,
-    headerMessageId: hdr('Message-ID'),
-    inboundMsgId,
-    inboundInReplyTo,
-    inboundReferences,
-  }));
-
   // 3. Hard-skip delivery failures and mail loops before calling Claude
   if (SKIP_SUBJECT_RE.test(Subject) || SKIP_SENDER_RE.test(From)) {
     console.log(`email/inbound: hard-skip (bounce/loop) from ${From}`);
@@ -729,7 +719,6 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
   // (Strategy 3 in findGmailThreadId), which runs after Claude's ~5-6 s delay,
   // giving Gmail time to index the inbox copy of the current inbound message.
   const storedThreadId = await lookupStoredThread(replyToAddress);
-  console.log('[threading-debug] storedThreadId (history only):', storedThreadId);
 
   const threadHistory    = storedThreadId ? await fetchThreadHistory(accessToken, storedThreadId) : [];
   const threadHistoryStr = formatThreadHistory(threadHistory);
@@ -781,7 +770,6 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
     ? await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo, From, Subject)
     : null;
   const threadId = inboxThreadId ?? storedThreadId ?? null;
-  console.log('[threading-debug] inboxThreadId:', inboxThreadId, '| storedThreadId:', storedThreadId, '| effective:', threadId);
 
   if (triage.action === 'skip') {
     console.log(`email/inbound: skip — ${triage.reason} (from: ${From}, subject: "${Subject}")`);
