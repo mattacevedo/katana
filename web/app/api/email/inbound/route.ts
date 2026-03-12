@@ -79,7 +79,9 @@ function buildRawMime(params: {
     .replace(/=+$/, '');
 }
 
-async function sendGmailMessage(accessToken: string, raw: string, threadId?: string | null): Promise<void> {
+async function sendGmailMessage(
+  accessToken: string, raw: string, threadId?: string | null
+): Promise<{ id: string; threadId: string }> {
   const body: Record<string, string> = { raw };
   if (threadId) body.threadId = threadId;
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -88,9 +90,12 @@ async function sendGmailMessage(accessToken: string, raw: string, threadId?: str
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Gmail send error (${res.status}): ${await res.text()}`);
+  return res.json();
 }
 
-async function createGmailDraft(accessToken: string, raw: string, threadId?: string | null): Promise<void> {
+async function createGmailDraft(
+  accessToken: string, raw: string, threadId?: string | null
+): Promise<{ id: string; message: { id: string; threadId: string } }> {
   const message: Record<string, string> = { raw };
   if (threadId) message.threadId = threadId;
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
@@ -99,6 +104,40 @@ async function createGmailDraft(accessToken: string, raw: string, threadId?: str
     body: JSON.stringify({ message }),
   });
   if (!res.ok) throw new Error(`Gmail draft error (${res.status}): ${await res.text()}`);
+  return res.json();
+}
+
+// ── Thread persistence (Supabase email_threads table) ─────────────────────
+// Stores the Gmail threadId returned by the API after each send/draft, keyed
+// by sender email. This sidesteps the Gmail rfc822msgid search which fails
+// when Google Workspace re-envelopes forwarded messages with a new internal ID.
+
+async function lookupStoredThread(senderEmail: string): Promise<string | null> {
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from('email_threads')
+      .select('gmail_thread_id')
+      .eq('sender_email', senderEmail.toLowerCase())
+      .single();
+    return data?.gmail_thread_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function storeThread(senderEmail: string, gmailThreadId: string): Promise<void> {
+  try {
+    const supabase = createAdminClient();
+    await supabase
+      .from('email_threads')
+      .upsert(
+        { sender_email: senderEmail.toLowerCase(), gmail_thread_id: gmailThreadId, updated_at: new Date().toISOString() },
+        { onConflict: 'sender_email' }
+      );
+  } catch (err) {
+    console.warn('email/inbound: failed to persist thread mapping (non-fatal)', err);
+  }
 }
 
 // Get the "Needs Attention" label ID, creating it if it doesn't exist yet
@@ -592,11 +631,19 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
     return NextResponse.json({ error: 'Gmail authentication failed.' }, { status: 500 });
   }
 
-  // First search: used to fetch thread history for Claude's context.
-  // May return null if the email hasn't been indexed by Gmail yet (race condition
-  // — Google Workspace forwards to Postmark before finishing inbox delivery).
-  const threadIdForHistory = await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo);
-  console.log('[threading-debug] threadId (pre-Claude):', threadIdForHistory);
+  // Look up stored threadId from a previous exchange with this sender.
+  // This is the primary threading mechanism — the Gmail rfc822msgid search is
+  // unreliable when GW re-envelopes forwarded messages before Postmark delivery.
+  const storedThreadId = await lookupStoredThread(replyToAddress);
+  console.log('[threading-debug] storedThreadId:', storedThreadId);
+
+  // Also search Gmail in case this is a fresh sender (no stored thread yet).
+  const searchedThreadId = storedThreadId
+    ? null  // skip search — we already have what we need
+    : await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo);
+  console.log('[threading-debug] searchedThreadId:', searchedThreadId);
+
+  const threadIdForHistory = storedThreadId ?? searchedThreadId;
   const threadHistory    = threadIdForHistory ? await fetchThreadHistory(accessToken, threadIdForHistory) : [];
   const threadHistoryStr = formatThreadHistory(threadHistory);
 
@@ -638,12 +685,11 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
   }
 
   // 6. Act on Claude's decision
-  // Retry threadId search after Claude (adds ~3-5 s since webhook fired).
-  // By now Gmail will have indexed the inbound email, fixing the race condition
-  // where Postmark forwards before Google Workspace finishes inbox delivery.
-  const threadId = threadIdForHistory
-    ?? await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo);
-  console.log('[threading-debug] threadId (post-Claude):', threadId);
+  // Effective threadId: stored (most reliable) → searched → null (first-ever email).
+  // After sending, we capture the Gmail API's returned threadId and store it,
+  // so every subsequent email from this sender lands in the same thread.
+  const threadId = storedThreadId ?? searchedThreadId;
+  console.log('[threading-debug] threadId (effective):', threadId);
 
   if (triage.action === 'skip') {
     console.log(`email/inbound: skip — ${triage.reason} (from: ${From}, subject: "${Subject}")`);
@@ -684,8 +730,10 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
 
   if (triage.action === 'auto_send') {
     try {
-      await sendGmailMessage(accessToken, raw, threadId);
-      console.log(`email/inbound: auto-sent reply to ${replyToAddress} re: "${Subject}" (thread: ${threadId ?? 'unknown'})`);
+      const sent = await sendGmailMessage(accessToken, raw, threadId);
+      console.log(`email/inbound: auto-sent reply re: "${Subject}" → thread: ${sent.threadId}`);
+      // Persist the threadId so future emails from this sender land in the same thread
+      await storeThread(replyToAddress, sent.threadId);
       void logActivity('email_auto_send', `Auto-replied to ${replyToAddress} re: "${Subject}"`, { from: From, subject: Subject });
     } catch (err) {
       console.error('email/inbound: Gmail send error', err);
@@ -697,8 +745,11 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
   // needs_attention: create draft + label the original inbox thread
   void logActivity('email_needs_attention', `Flagged for review from ${replyToAddress} — ${triage.reason}`, { from: From, subject: Subject, reason: triage.reason });
   try {
-    await createGmailDraft(accessToken, raw, threadId);
-    console.log(`email/inbound: draft created for "${Subject}" from ${replyToAddress}`);
+    const draft = await createGmailDraft(accessToken, raw, threadId);
+    const draftThreadId = draft.message?.threadId;
+    console.log(`email/inbound: draft created for "${Subject}" → thread: ${draftThreadId}`);
+    // Persist so future emails from this sender thread correctly
+    if (draftThreadId) await storeThread(replyToAddress, draftThreadId);
   } catch (err) {
     console.error('email/inbound: Gmail draft error', err);
     return NextResponse.json({ error: 'Failed to create Gmail draft.' }, { status: 500 });
