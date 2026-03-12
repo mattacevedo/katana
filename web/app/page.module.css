@@ -172,6 +172,14 @@
 .featureTitle { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
 .featureDesc { font-size: 13px; color: var(--muted); line-height: 1.7; }
 
+/* ── Why Katana ─────────────────────────────────────────────────────────── */
+.whyKatana { padding: 72px 40px; text-align: center; background: #f8fafc; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.whyGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; max-width: 1080px; margin: 0 auto; text-align: left; }
+.whyCard { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 28px 24px; }
+.whyIcon { font-size: 32px; margin-bottom: 14px; }
+.whyTitle { font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
+.whyDesc { font-size: 13px; color: var(--muted); line-height: 1.75; }
+
 /* ── Privacy callout ───────────────────────────────────────────────────── */
 .privacyCallout { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 72px 40px; text-align: center; }
 .privacyIcon { font-size: 48px; margin-bottom: 16px; }
@@ -245,6 +253,9 @@
 
   /* Features */
   .features { padding: 16px 20px 48px; gap: 16px; }
+
+  /* Why Katana */
+  .whyKatana { padding: 48px 20px; }
 
   /* Privacy */
   .privacyCallout { padding: 48px 20px; }

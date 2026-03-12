@@ -300,6 +300,46 @@ export default async function LandingPage() {
         ))}
       </section>
 
+      {/* ── Why Katana ──────────────────────────────────────────────────── */}
+      <section className={styles.whyKatana}>
+        <h2 className={styles.sectionTitle}>No tab switching. No IT tickets. No copy-pasting.</h2>
+        <p className={styles.sectionSub}>
+          Most AI grading tools make you leave Canvas to use them. Katana doesn&apos;t.
+        </p>
+        <div className={styles.whyGrid}>
+          <div className={styles.whyCard}>
+            <div className={styles.whyIcon}>🖥️</div>
+            <h3 className={styles.whyTitle}>Works inside SpeedGrader</h3>
+            <p className={styles.whyDesc}>
+              Other tools send you to a separate app — import submissions, grade there,
+              export back to Canvas. Katana lives inside SpeedGrader. Open a submission,
+              click Grade, and everything fills in automatically. You never leave the
+              workflow you already know.
+            </p>
+          </div>
+          <div className={styles.whyCard}>
+            <div className={styles.whyIcon}>🔓</div>
+            <h3 className={styles.whyTitle}>No IT department needed</h3>
+            <p className={styles.whyDesc}>
+              Tools like Turnitin and Gradescope require your institution&apos;s IT team
+              to install and configure them — a process that can take months, require
+              contracts, and may never get approved. Katana is a Chrome extension you
+              install yourself in 60 seconds. No tickets. No approvals. No waiting.
+            </p>
+          </div>
+          <div className={styles.whyCard}>
+            <div className={styles.whyIcon}>🚫</div>
+            <h3 className={styles.whyTitle}>No copy-pasting. Ever.</h3>
+            <p className={styles.whyDesc}>
+              Many AI tools require you to copy each student&apos;s submission, paste it
+              into their platform, then copy the feedback back into Canvas — for every
+              single student. Katana reads submissions and writes feedback directly in
+              Canvas. You never touch the clipboard.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* ── Privacy callout ──────────────────────────────────────────────── */}
       <section className={styles.privacyCallout}>
         <div className={styles.privacyIcon}>🛡️</div>
