@@ -670,7 +670,7 @@ AUTO_SEND — Reply immediately, no human review needed. Use for:
 NEEDS_ATTENTION — Stage a draft reply + flag for human review. Use for:
 - Refund or billing dispute requests
 - Repeated technical issues — user has already tried basic troubleshooting, or mentions the problem keeps happening
-- Major bugs or data issues — wrong grades recorded, extension broke mid-grading session, submission content not read correctly
+- Major bugs — extension broke mid-grading session, submission content not read, rubric not detected
 - Account access issues for EXISTING customers (can't log in, subscription not updating, quota wrong)
 - Feature requests or partnership inquiries
 - Complaints or frustrated users
