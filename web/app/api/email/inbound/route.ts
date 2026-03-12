@@ -189,20 +189,47 @@ async function findGmailThreadId(
   accessToken: string,
   messageId:   string,
   inReplyTo?:  string | null,
+  fromEmail?:  string,
+  subject?:    string,
 ): Promise<string | null> {
-  // Strategy 1
+  // Strategy 1: search by the exact RFC 2822 Message-ID
   const threadId = await searchGmailByMsgId(accessToken, messageId);
   if (threadId) {
     console.log(`email/inbound: thread found by MessageID → ${threadId}`);
     return threadId;
   }
 
-  // Strategy 2 — use In-Reply-To to locate the previous outbound message
+  // Strategy 2 — use In-Reply-To to locate the previous outbound message in Sent
   if (inReplyTo) {
     const fallback = await searchGmailByMsgId(accessToken, inReplyTo);
     if (fallback) {
       console.log(`email/inbound: thread found via In-Reply-To fallback → ${fallback}`);
       return fallback;
+    }
+  }
+
+  // Strategy 3 — from+subject inbox search
+  // Google Workspace re-envelopes forwarded messages, changing the internal
+  // Message-ID that Gmail indexes.  Strategies 1 and 2 always miss the inbox copy
+  // because of this.  Searching by sender + subject is reliable and sidesteps
+  // the re-enveloping problem entirely.
+  //
+  // Best called AFTER Claude finishes (~5-6 s after the webhook fires), giving
+  // Gmail enough time to index the inbox copy before we search.
+  if (fromEmail && subject) {
+    const cleanSubject = subject.replace(/^(Re:\s*)+/i, '').trim();
+    const q = `from:${fromEmail} subject:"${cleanSubject}" in:inbox newer_than:1d`;
+    const res = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=1`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } },
+    );
+    if (res.ok) {
+      const data = await res.json() as { messages?: { id: string; threadId: string }[] };
+      const found = data.messages?.[0]?.threadId ?? null;
+      if (found) {
+        console.log(`email/inbound: thread found by from+subject → ${found}`);
+        return found;
+      }
     }
   }
 
@@ -677,8 +704,7 @@ The Katana Team
 
 FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound signs for headers, no backticks, no dashes for bullet lists. Use numbered lists (1. 2. 3.) sparingly if needed. Write as if composing an email, not a document.`;
 
-  // 5a. Fetch Gmail access token + thread context before calling Claude
-  //     so we can include conversation history in the prompt.
+  // 5a. Fetch Gmail access token + stored thread for conversation history
   let accessToken: string;
   try {
     accessToken = await getGmailAccessToken();
@@ -687,20 +713,15 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
     return NextResponse.json({ error: 'Gmail authentication failed.' }, { status: 500 });
   }
 
-  // Look up stored threadId from a previous exchange with this sender.
-  // This is the primary threading mechanism — the Gmail rfc822msgid search is
-  // unreliable when GW re-envelopes forwarded messages before Postmark delivery.
+  // Look up a previously stored threadId for this sender — used ONLY to fetch
+  // prior conversation history for Claude's context.  We do NOT use the stored
+  // threadId for reply placement; that is resolved after Claude via inbox search
+  // (Strategy 3 in findGmailThreadId), which runs after Claude's ~5-6 s delay,
+  // giving Gmail time to index the inbox copy of the current inbound message.
   const storedThreadId = await lookupStoredThread(replyToAddress);
-  console.log('[threading-debug] storedThreadId:', storedThreadId);
+  console.log('[threading-debug] storedThreadId (history only):', storedThreadId);
 
-  // Also search Gmail in case this is a fresh sender (no stored thread yet).
-  const searchedThreadId = storedThreadId
-    ? null  // skip search — we already have what we need
-    : await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo);
-  console.log('[threading-debug] searchedThreadId:', searchedThreadId);
-
-  const threadIdForHistory = storedThreadId ?? searchedThreadId;
-  const threadHistory    = threadIdForHistory ? await fetchThreadHistory(accessToken, threadIdForHistory) : [];
+  const threadHistory    = storedThreadId ? await fetchThreadHistory(accessToken, storedThreadId) : [];
   const threadHistoryStr = formatThreadHistory(threadHistory);
 
   const userMessage = [
@@ -741,11 +762,16 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
   }
 
   // 6. Act on Claude's decision
-  // Effective threadId: stored (most reliable) → searched → null (first-ever email).
-  // After sending, we capture the Gmail API's returned threadId and store it,
-  // so every subsequent email from this sender lands in the same thread.
-  const threadId = storedThreadId ?? searchedThreadId;
-  console.log('[threading-debug] threadId (effective):', threadId);
+  // Search for the current incoming email's threadId NOW — after Claude's ~5-6 s
+  // delay, giving Gmail time to index the inbox copy before we search.
+  // Strategy 3 (from+subject) in findGmailThreadId handles GW re-enveloping.
+  // Fall back to storedThreadId only if the inbox search finds nothing
+  // (e.g. email was routed to spam rather than inbox).
+  const inboxThreadId = triage.action !== 'skip'
+    ? await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo, From, Subject)
+    : null;
+  const threadId = inboxThreadId ?? storedThreadId ?? null;
+  console.log('[threading-debug] inboxThreadId:', inboxThreadId, '| storedThreadId:', storedThreadId, '| effective:', threadId);
 
   if (triage.action === 'skip') {
     console.log(`email/inbound: skip — ${triage.reason} (from: ${From}, subject: "${Subject}")`);
