@@ -459,7 +459,7 @@ export default async function LandingPage() {
               cta: 'Start Shogun',
               href: '/api/upgrade?plan=shogun',
               highlight: false,
-              badge: 'Large classes & high teaching load',
+              badge: 'Large classes or high teaching load',
             },
           ].map(plan => (
             <div
