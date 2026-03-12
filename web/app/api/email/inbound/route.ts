@@ -659,6 +659,8 @@ AUTO_SEND — Reply immediately, no human review needed. Use for:
 - Questions clearly answered by the information above (pricing, how it works, installation, compatibility, cancellation)
 - General curiosity / pre-sales questions
 - Simple "thank you" emails that warrant a brief acknowledgment
+- Non-customers (SENDER ACCOUNT: No) asking how to sign up, get started, or why they don't have an account yet — direct them to gradewithkatana.com
+- Technical questions from non-customers that are clearly answered above (e.g. which browsers, which LMS, supported file types)
 - IMPORTANT: Only use auto_send when you are confident the answer is complete and accurate.
   If you are uncertain about any detail, use needs_attention instead.
 - NEVER suggest the customer "reach out", "contact us", or "get in touch" in an auto_send reply.
@@ -667,7 +669,7 @@ AUTO_SEND — Reply immediately, no human review needed. Use for:
 NEEDS_ATTENTION — Stage a draft reply + flag for human review. Use for:
 - Refund or billing dispute requests
 - Reports of bugs or unexpected behavior
-- Account access issues (can't log in, subscription not updating)
+- Account access issues for EXISTING customers (can't log in, subscription not updating, quota wrong)
 - Feature requests or partnership inquiries
 - Complaints or frustrated users
 - Anything where the correct answer is unclear or requires judgment
