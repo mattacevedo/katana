@@ -592,9 +592,12 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
     return NextResponse.json({ error: 'Gmail authentication failed.' }, { status: 500 });
   }
 
-  const threadId         = await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo);
-  console.log('[threading-debug] threadId resolved:', threadId);
-  const threadHistory    = threadId ? await fetchThreadHistory(accessToken, threadId) : [];
+  // First search: used to fetch thread history for Claude's context.
+  // May return null if the email hasn't been indexed by Gmail yet (race condition
+  // — Google Workspace forwards to Postmark before finishing inbox delivery).
+  const threadIdForHistory = await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo);
+  console.log('[threading-debug] threadId (pre-Claude):', threadIdForHistory);
+  const threadHistory    = threadIdForHistory ? await fetchThreadHistory(accessToken, threadIdForHistory) : [];
   const threadHistoryStr = formatThreadHistory(threadHistory);
 
   const userMessage = [
@@ -635,6 +638,13 @@ FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound si
   }
 
   // 6. Act on Claude's decision
+  // Retry threadId search after Claude (adds ~3-5 s since webhook fired).
+  // By now Gmail will have indexed the inbound email, fixing the race condition
+  // where Postmark forwards before Google Workspace finishes inbox delivery.
+  const threadId = threadIdForHistory
+    ?? await findGmailThreadId(accessToken, inboundMsgId, inboundInReplyTo);
+  console.log('[threading-debug] threadId (post-Claude):', threadId);
+
   if (triage.action === 'skip') {
     console.log(`email/inbound: skip — ${triage.reason} (from: ${From}, subject: "${Subject}")`);
     void logActivity('email_skip', `Skipped from ${replyToAddress} — ${triage.reason}`, { from: From, subject: Subject });
