@@ -825,7 +825,7 @@ NEVER use the em dash character (—). It is a dead giveaway of AI-generated tex
 
     try {
       const qstashRes = await fetch(
-        `https://qstash.upstash.io/v2/publish/${appUrl}/api/email/send-reply`,
+        `${process.env.QSTASH_URL ?? 'https://qstash.upstash.io'}/v2/publish/${appUrl}/api/email/send-reply`,
         {
           method:  'POST',
           headers: {
