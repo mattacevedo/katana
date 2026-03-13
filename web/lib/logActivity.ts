@@ -24,7 +24,7 @@ import { createAdminClient } from './supabase/admin';
 // Only persist known, safe keys to the activity_log metadata JSONB column.
 // This prevents callers from accidentally storing PII or large payloads.
 const METADATA_ALLOWLIST = new Set([
-  'plan', 'email', 'subject', 'messageId', 'from', 'to', 'action',
+  'plan', 'email', 'subject', 'messageId', 'from', 'to', 'action', 'grades',
 ]);
 
 function sanitizeMetadata(meta: Record<string, unknown>): Record<string, unknown> {
@@ -49,7 +49,8 @@ export type ActivityEventType =
   | 'upgrade'
   | 'cancel'
   | 'reactivate'
-  | 'payment_failed';
+  | 'payment_failed'
+  | 'addon_purchase';
 
 export async function logActivity(
   eventType: ActivityEventType,
