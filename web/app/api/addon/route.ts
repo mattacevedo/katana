@@ -9,6 +9,7 @@
 // credits 100 bonus grades to the user's profile via add_bonus_grades().
 
 import { NextRequest, NextResponse } from 'next/server';
+import type Stripe from 'stripe';
 import { createClient } from '../../../lib/supabase/server';
 import { getStripe, STRIPE_ADDON_PRICE_ID } from '../../../lib/stripe';
 
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
   try {
     const stripe = getStripe();
 
-    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
       mode: 'payment',
       line_items: [{ price: STRIPE_ADDON_PRICE_ID, quantity: 1 }],
       success_url: `${appUrl}/dashboard?addon_purchased=1`,
