@@ -34,6 +34,9 @@ export const STRIPE_PRICES = {
   shogun_monthly: process.env.STRIPE_PRICE_SHOGUN_MONTHLY || '',
 } as const;
 
+// One-time add-on pack: 100 grades for $5. Only available to paid plan users.
+export const STRIPE_ADDON_PRICE_ID = process.env.STRIPE_PRICE_ADDON_ONETIME || '';
+
 // Reverse map: price ID → internal plan slug
 export function planFromPriceId(priceId: string): string | null {
   for (const [key, id] of Object.entries(STRIPE_PRICES)) {

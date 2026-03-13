@@ -97,12 +97,13 @@ export async function POST(req: NextRequest) {
   const { data: profile } = await supabase
     .from('profiles')
     .upsert({ id: user.id }, { onConflict: 'id', ignoreDuplicates: true })
-    .select('plan, grades_this_period, period_start')
+    .select('plan, grades_this_period, period_start, bonus_grades')
     .eq('id', user.id)
     .single();
 
-  const plan = profile?.plan || 'free';
-  const limit = PLAN_LIMITS[plan] ?? 50;
+  const plan        = profile?.plan || 'free';
+  const limit       = PLAN_LIMITS[plan] ?? 50;
+  const bonusGrades = profile?.bonus_grades ?? 0;
 
   // 3. Parse request body
   let body: { submissionData: unknown; settings: unknown };
@@ -164,19 +165,22 @@ export async function POST(req: NextRequest) {
   // 4. Atomically claim one quota slot before calling Claude.
   //    Uses a Postgres RPC that does CHECK + INCREMENT in one statement,
   //    preventing the TOCTOU race condition from concurrent requests.
-  const { data: allowed, error: rpcError } = await supabase.rpc('increment_grade_count', {
-    p_user_id: user.id,
-    p_limit:   limit,
+  const { data: allowed, error: rpcError } = await supabase.rpc('increment_grade_count_v2', {
+    p_user_id:    user.id,
+    p_plan_limit: limit,
   });
 
   if (rpcError) {
-    console.error('Katana /api/grade: increment_grade_count RPC error', rpcError);
+    console.error('Katana /api/grade: increment_grade_count_v2 RPC error', rpcError);
     return json({ error: 'Failed to verify quota. Please try again.' }, 500);
   }
 
   if (!allowed) {
+    const upgradeMsg = plan === 'free'
+      ? 'Upgrade your plan at gradewithkatana.com to get more grades.'
+      : 'Purchase a Grade Pack at gradewithkatana.com/dashboard, or wait for your monthly quota to reset.';
     return json({
-      error: `You've used all ${limit} grades for this period. Upgrade your plan at gradewithkatana.com to continue grading.`
+      error: `You've used all your available grades for this month. ${upgradeMsg}`
     }, 402);
   }
 
@@ -188,11 +192,22 @@ export async function POST(req: NextRequest) {
   try {
     result = await callClaude(systemPrompt, userMessage, fileAttachments, settings.model);
   } catch (err: unknown) {
-    // Roll back the quota slot we just claimed — Claude failed, grade not consumed
-    await supabase
-      .from('profiles')
-      .update({ grades_this_period: (profile?.grades_this_period ?? 0) })
-      .eq('id', user.id);
+    // Roll back the quota slot we just claimed — Claude failed, grade not consumed.
+    // increment_grade_count_v2 uses plan quota first, then bonus grades.
+    // If plan quota was already full, bonus grades were consumed instead.
+    if ((profile?.grades_this_period ?? 0) >= limit) {
+      // Bonus grade was used — restore it
+      await supabase
+        .from('profiles')
+        .update({ bonus_grades: bonusGrades + 1 })
+        .eq('id', user.id);
+    } else {
+      // Plan quota slot was used — restore it
+      await supabase
+        .from('profiles')
+        .update({ grades_this_period: (profile?.grades_this_period ?? 0) })
+        .eq('id', user.id);
+    }
     console.error('Katana /api/grade: Claude error', err);
     return json({ error: 'Failed to grade the submission. Please try again.' }, 500);
   }

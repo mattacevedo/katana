@@ -60,10 +60,18 @@ async function fetchSubscriptionStatus(subscriptionId: string): Promise<Subscrip
   }
 }
 
+const PAID_PLANS = new Set(['basic', 'super', 'shogun']);
+
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ upgraded?: string; cancelled?: string; reactivated?: string }>;
+  searchParams: Promise<{
+    upgraded?: string;
+    cancelled?: string;
+    reactivated?: string;
+    addon_purchased?: string;
+    addon_error?: string;
+  }>;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -72,13 +80,14 @@ export default async function DashboardPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan, grades_this_period, period_start, stripe_customer_id, stripe_subscription_id')
+    .select('plan, grades_this_period, period_start, bonus_grades, stripe_customer_id, stripe_subscription_id')
     .eq('id', user.id)
     .single();
 
-  const plan = profile?.plan || 'free';
-  const used = profile?.grades_this_period || 0;
-  const limit = PLAN_LIMITS[plan] ?? 50;
+  const plan        = profile?.plan || 'free';
+  const used        = profile?.grades_this_period || 0;
+  const limit       = PLAN_LIMITS[plan] ?? 50;
+  const bonusGrades = profile?.bonus_grades ?? 0;
   const periodStart = profile?.period_start
     ? new Date(profile.period_start).toLocaleDateString()
     : 'N/A';
@@ -94,7 +103,7 @@ export default async function DashboardPage({
       : Promise.resolve(null),
   ]);
 
-  const { cancelled, upgraded, reactivated } = await searchParams;
+  const { cancelled, upgraded, reactivated, addon_purchased, addon_error } = await searchParams;
 
   return (
     <div className={styles.page}>
@@ -123,6 +132,21 @@ export default async function DashboardPage({
         {cancelled === '1' && subStatus && (
           <div className={styles.banner} data-type="info">
             Your subscription has been cancelled. You keep full access until <strong>{subStatus.periodEnd}</strong>.
+          </div>
+        )}
+        {addon_purchased === '1' && (
+          <div className={styles.banner} data-type="success">
+            🎉 Grade pack added! 100 bonus grades are now available in your account.
+          </div>
+        )}
+        {addon_error === 'plan' && (
+          <div className={styles.banner} data-type="info">
+            Grade packs are available for paid plan subscribers only. Upgrade your plan to purchase them.
+          </div>
+        )}
+        {(addon_error === 'stripe' || addon_error === 'config') && (
+          <div className={styles.banner} data-type="info">
+            Something went wrong setting up your purchase. Please try again or contact support.
           </div>
         )}
 
@@ -171,6 +195,16 @@ export default async function DashboardPage({
                 style={{ width: `${Math.min(100, (used / limit) * 100)}%` }}
               />
             </div>
+            {bonusGrades > 0 && (
+              <div className={styles.bonusRow}>
+                +{bonusGrades} bonus grade{bonusGrades !== 1 ? 's' : ''} available
+              </div>
+            )}
+            {PAID_PLANS.has(plan) && !subStatus?.cancelAtPeriodEnd && (
+              <Link href="/api/addon" className={styles.addonBtn}>
+                Buy 100 more grades — $5 →
+              </Link>
+            )}
           </div>
 
           <div className={styles.card}>

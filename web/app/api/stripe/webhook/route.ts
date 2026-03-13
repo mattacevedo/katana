@@ -90,9 +90,33 @@ export async function POST(req: NextRequest) {
   try {
     switch (event.type) {
 
-      // ── Successful checkout: first-time subscription ──────────────────────
+      // ── Successful checkout ───────────────────────────────────────────────
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        // ── One-time add-on pack purchase ─────────────────────────────────
+        if (session.mode === 'payment') {
+          const userId = session.metadata?.supabase_user_id;
+          const addonGrades = parseInt(session.metadata?.addon_grades ?? '100', 10);
+
+          if (!isValidUuid(userId)) {
+            console.error('webhook: one-time payment — missing or invalid supabase_user_id in metadata');
+            break;
+          }
+
+          const { error: dbErr } = await supabase.rpc('add_bonus_grades', {
+            p_user_id: userId,
+            p_amount:  addonGrades,
+          });
+
+          if (dbErr) throw new Error(`DB add_bonus_grades failed: ${dbErr.message}`);
+
+          console.log(`webhook: add-on pack purchased — +${addonGrades} bonus grades for user ${userId}`);
+          void logActivity('addon_purchase', `Grade pack purchased (+${addonGrades} grades)`, { grades: addonGrades });
+          break;
+        }
+
+        // ── First-time subscription ───────────────────────────────────────
         if (session.mode !== 'subscription') break;
 
         // metadata is set on the checkout session (not on subscription_data, which
