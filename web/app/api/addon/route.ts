@@ -28,14 +28,21 @@ export async function GET(req: NextRequest) {
   // 2. Check plan — free users cannot buy add-ons
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan, stripe_customer_id')
+    .select('plan, stripe_customer_id, bonus_grades')
     .eq('id', user.id)
     .single();
 
-  const plan = profile?.plan || 'free';
+  const plan        = profile?.plan || 'free';
+  const bonusGrades = profile?.bonus_grades ?? 0;
 
   if (!PAID_PLANS.has(plan)) {
     return NextResponse.redirect(new URL('/dashboard?addon_error=plan', req.url));
+  }
+
+  // 2b. Guard: only allow purchase when existing balance is below 20
+  //     Prevents grade-pack stockpiling while giving a small grace buffer.
+  if (bonusGrades > 20) {
+    return NextResponse.redirect(new URL('/dashboard?addon_error=has_credits', req.url));
   }
 
   // 3. Guard: price ID must be configured

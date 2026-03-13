@@ -651,6 +651,10 @@ Common questions & correct answers:
 - "How do I cancel?" → Log in at gradewithkatana.com/dashboard → account settings → cancel subscription
 - "When does my quota reset?" → Every month from your signup date
 - "Can I upgrade mid-month?" → Yes, upgrades take effect immediately
+- "What counts as a grade?" → Each click of the "Grade This Submission" button in Katana uses 1 grade from the monthly quota. Reviewing, editing, or submitting the grade in Canvas does not use an additional grade.
+- "What are Grade Packs / bonus grades?" → Grade Packs are one-time purchases of 100 extra grades for $5, available to paid plan subscribers (Basic, Super, or Shogun). Bonus grades are permanent — they never expire and are not affected by monthly resets. They are only consumed after the monthly plan quota is exhausted.
+- "Can I buy multiple Grade Packs?" → To prevent large unused balances, a new pack can only be purchased when the existing bonus grade balance drops below 20. Once it does, the "Buy 100 more grades" link reappears on the dashboard.
+- "Do bonus grades disappear if I cancel?" → No. Bonus grades persist even if a subscription is cancelled or downgraded. They remain in the account and can still be used on the free plan once the monthly quota is exhausted.
 
 IMPORTANT: Always refer to billing cycles as "months" — never use the word "period". Katana only offers monthly billing.
 

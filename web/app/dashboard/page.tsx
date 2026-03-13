@@ -149,6 +149,11 @@ export default async function DashboardPage({
             Something went wrong setting up your purchase. Please try again or contact support.
           </div>
         )}
+        {addon_error === 'has_credits' && (
+          <div className={styles.banner} data-type="info">
+            You still have {bonusGrades} bonus grade{bonusGrades !== 1 ? 's' : ''} remaining. You can purchase another pack when your balance drops below 20.
+          </div>
+        )}
 
         <div className={styles.cards}>
           <div className={styles.card}>
@@ -188,7 +193,7 @@ export default async function DashboardPage({
             <div className={styles.cardValue}>
               {used} / {limit}
             </div>
-            <div className={styles.cardSub}>Since {periodStart}</div>
+            <div className={styles.cardSub}>Since {periodStart} · 1 grade = 1 &quot;Grade This Submission&quot; click</div>
             <div className={styles.progressBar}>
               <div
                 className={styles.progressFill}
@@ -201,9 +206,15 @@ export default async function DashboardPage({
               </div>
             )}
             {PAID_PLANS.has(plan) && !subStatus?.cancelAtPeriodEnd && (
-              <Link href="/api/addon" className={styles.addonBtn}>
-                Buy 100 more grades — $5 →
-              </Link>
+              bonusGrades <= 20 ? (
+                <Link href="/api/addon" className={styles.addonBtn}>
+                  Buy 100 more grades — $5 →
+                </Link>
+              ) : (
+                <div className={styles.addonDisabled}>
+                  Top up available when balance drops below 20
+                </div>
+              )
             )}
           </div>
 
