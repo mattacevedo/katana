@@ -817,17 +817,41 @@ NEVER use the em dash character (—). It is a dead giveaway of AI-generated tex
   });
 
   if (triage.action === 'auto_send') {
+    // Queue the reply via QStash with a random 25–45 minute delay so it
+    // arrives with a human-looking response time rather than instantly.
+    const delayMinutes = Math.floor(Math.random() * 21) + 25; // 25–45 min
+    const delaySeconds = delayMinutes * 60;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.gradewithkatana.com';
+
     try {
-      const sent = await sendGmailMessage(accessToken, raw, threadId);
-      console.log(`email/inbound: auto-sent reply re: "${Subject}" → thread: ${sent.threadId}`);
-      // Persist the threadId so future emails from this sender land in the same thread
-      await storeThread(replyToAddress, sent.threadId);
-      void logActivity('email_auto_send', `Auto-replied to ${replyToAddress} re: "${Subject}"`, { from: From, subject: Subject });
+      const qstashRes = await fetch(
+        `https://qstash.upstash.io/v2/publish/${appUrl}/api/email/send-reply`,
+        {
+          method:  'POST',
+          headers: {
+            'Authorization':  `Bearer ${process.env.QSTASH_TOKEN}`,
+            'Content-Type':   'application/json',
+            'Upstash-Delay':  `${delaySeconds}s`,
+            'Upstash-Retries': '3',
+          },
+          body: JSON.stringify({
+            raw,
+            threadId,
+            replyToAddress,
+            subject: Subject,
+          }),
+        }
+      );
+      if (!qstashRes.ok) {
+        throw new Error(`QStash error (${qstashRes.status}): ${await qstashRes.text()}`);
+      }
+      console.log(`email/inbound: reply queued via QStash (delay: ${delayMinutes} min) re: "${Subject}"`);
+      void logActivity('email_auto_send', `Reply queued (${delayMinutes} min delay) to ${replyToAddress} re: "${Subject}"`, { from: From, subject: Subject });
     } catch (err) {
-      console.error('email/inbound: Gmail send error', err);
-      return NextResponse.json({ error: 'Failed to send reply.' }, { status: 500 });
+      console.error('email/inbound: QStash queue error', err);
+      return NextResponse.json({ error: 'Failed to queue reply.' }, { status: 500 });
     }
-    return NextResponse.json({ action: 'auto_send' });
+    return NextResponse.json({ action: 'auto_send', delayMinutes });
   }
 
   // needs_attention: create draft + label the original inbox thread
