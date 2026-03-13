@@ -708,7 +708,9 @@ Naomi
 Customer Success Advocate
 The Katana Team
 
-FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound signs for headers, no backticks, no dashes for bullet lists. Use numbered lists (1. 2. 3.) sparingly if needed. Write as if composing an email, not a document.`;
+FORMATTING: Plain prose only. No markdown — no asterisks for bold, no pound signs for headers, no backticks, no dashes for bullet lists. Use numbered lists (1. 2. 3.) sparingly if needed. Write as if composing an email, not a document.
+
+NEVER use the em dash character (—). It is a dead giveaway of AI-generated text. Use a comma, period, or rewrite the sentence instead.`;
 
   // 5a. Fetch Gmail access token + stored thread for conversation history
   let accessToken: string;
