@@ -168,6 +168,10 @@ async function triggerGrading() {
 
     document.getElementById('btn-error-signin').classList.add('hidden');
     displayResults(response.result);
+    // Refresh quota count now that one grade has been consumed
+    chrome.storage.local.get('authToken', ({ authToken }) => {
+      if (authToken) fetchAndDisplayQuota(authToken);
+    });
 
   } catch (err) {
     document.getElementById('error-message').textContent = err.message;

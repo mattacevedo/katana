@@ -114,8 +114,8 @@ async function handleGradeSubmission(message, sendResponse) {
     );
 
     // 5. Strip docViewerUrl before sending to backend; fetch page count if annotating
-    const { docViewerUrl, ...submissionForApi } = submissionData;
-    if (settings.inlineComments && docViewerUrl) {
+    const { docViewerUrl: _docViewerUrl, ...submissionForApi } = submissionData;
+    if (settings.inlineComments) {
       const pageCount = await getPageCountFromCanvadocs(tab.id).catch(() => null);
       if (pageCount) submissionForApi.pageCount = pageCount;
     }
@@ -125,9 +125,9 @@ async function handleGradeSubmission(message, sendResponse) {
 
     // 7. Post inline annotations to Canvadocs (best-effort, non-blocking on grading)
     let inlineAnnotationsPosted = 0;
-    if (settings.inlineComments && katanaResult.inline_comments?.length && docViewerUrl) {
+    if (settings.inlineComments && katanaResult.inline_comments?.length) {
       try {
-        const jwtInfo = await resolveCanvadocJWT(docViewerUrl);
+        const jwtInfo = await resolveCanvadocJWT(tab.id);
         if (jwtInfo) {
           const { posted } = await postCanvadocsAnnotations(jwtInfo, katanaResult.inline_comments, tab.id);
           inlineAnnotationsPosted = posted;
@@ -236,24 +236,22 @@ function sendToContentScript(tabId, message) {
 
 // ─── Canvadocs Inline Annotations ────────────────────────────────────────────
 
-// Fetches the Canvas canvadoc_session URL (with user credentials) and extracts
-// the Canvadocs JWT + base URL from the redirect destination.
-// The service worker bypasses CORS for *.instructure.com (host_permissions).
-async function resolveCanvadocJWT(canvadocSessionUrl) {
+// Extracts the Canvadocs JWT + base URL directly from the already-loaded
+// canvadocs.instructure.com iframe URL in the tab.
+// The JWT is visible in the iframe's URL path:
+// https://canvadocs.instructure.com/1/sessions/{JWT}/view?theme=dark
+// This avoids having to fetch the Canvas canvadoc_session endpoint entirely.
+async function resolveCanvadocJWT(tabId) {
   try {
-    const resp = await fetch(canvadocSessionUrl, {
-      credentials: 'include',
-      redirect: 'follow'
-    });
-    // After following the redirect, resp.url is the Canvadocs viewer URL:
-    // https://canvadocs.instructure.com/1/sessions/{JWT}/view?theme=dark
-    const url = new URL(resp.url);
-    if (!url.hostname.includes('canvadoc')) return null;
+    const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    const frame = frames?.find(f => f.url?.includes('canvadocs.instructure.com'));
+    if (!frame?.url) return null;
+    const url = new URL(frame.url);
     const match = url.pathname.match(/\/sessions\/([^/]+)\//);
     if (!match) return null;
     return { jwt: match[1], baseUrl: url.origin };
   } catch (e) {
-    console.warn('Katana: could not resolve Canvadoc session JWT', e.message);
+    console.warn('Katana: could not resolve Canvadoc JWT from frame', e.message);
     return null;
   }
 }
