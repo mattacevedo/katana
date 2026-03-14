@@ -318,12 +318,17 @@ function buildPrompts(data: SubmissionData, settings: GradingSettings) {
     default: schemaDesc = `points — a number from 0 to ${maxPoints || 100}.`;
   }
 
+  // Enable annotations for any submission rendered in DocViewer (PDF attachment OR
+  // Word/file submission showing in Canvadocs — confirmed by pageCount being returned).
+  const hasAttachments = (data.submission?.fileAttachments?.length ?? 0) > 0;
+  const hasDocViewer   = hasAttachments || (data.pageCount != null && data.pageCount > 0);
+
     const annotationsPerPage = settings.annotationsPerPage ?? 1;
     const annotationTarget   = data.pageCount
       ? Math.min(Math.max(2, Math.round(data.pageCount * annotationsPerPage)), 16)
       : Math.max(2, Math.round(4 * annotationsPerPage)); // default 4-page estimate
 
-    const inlineCommentsInstruction = settings.inlineComments ? `
+    const inlineCommentsInstruction = (settings.inlineComments && hasDocViewer) ? `
 
 INLINE ANNOTATIONS:
 The feedback above gives the big-picture evaluation. Inline annotations give line-level observations that complement — not repeat — that feedback.
@@ -340,8 +345,6 @@ For each annotation:
   • Uses supportive, nonjudgmental language even when identifying gaps
   • Frames improvements as opportunities: "to strengthen this further..." not "this is wrong"
 - Provide the page number (1-indexed) where the quote appears
-
-Only generate annotations if file attachments are present. For text-only submissions, set inline_comments to [].
 
 Add to your JSON response:
 "inline_comments": [{"page": <number>, "quote": "<verbatim text>", "comment": "<annotation>"}]` : '';
@@ -365,12 +368,12 @@ Respond ONLY with valid JSON:
   "rubric_ratings": [{"criterion_id": "...", "points": <number>, "comments": "..."}],
   "grading_rationale": "<2-4 sentence internal explanation for the instructor>",
   "confidence": "<high | medium | low>",
-  "confidence_reason": "<one sentence, only if confidence is medium or low>"${settings.inlineComments ? `,
+  "confidence_reason": "<one sentence, only if confidence is medium or low>"${(settings.inlineComments && hasDocViewer) ? `,
   "inline_comments": [{"page": <number>, "quote": "<verbatim short quote>", "comment": "<annotation>"}]` : ''}
 }
 
 If no rubric is present, set rubric_ratings to [].
-Omit confidence_reason entirely if confidence is high.${settings.inlineComments ? '\nIf no file attachments are present, set inline_comments to [].' : ''}`;
+Omit confidence_reason entirely if confidence is high.`;
 
   let rubricSection = 'No rubric provided.';
   if (data.rubric?.criteria?.length) {
@@ -380,7 +383,6 @@ Omit confidence_reason entirely if confidence is high.${settings.inlineComments 
     }).join('\n\n');
   }
 
-  const hasAttachments = (data.submission?.fileAttachments?.length ?? 0) > 0;
   const submissionBody = hasAttachments
     ? '[The student\'s file(s) are attached as document(s) above — read them to evaluate the submission.]'
     : (data.submission?.content || '[No readable content available]');
