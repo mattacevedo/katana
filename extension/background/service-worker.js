@@ -63,8 +63,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'GET_SETTINGS':
       chrome.storage.sync.get(
-        ['model', 'tone', 'customInstructions', 'feedbackLength', 'strictness',
-         'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay'],
+        ['tone', 'customInstructions', 'feedbackLength', 'strictness',
+         'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay', 'inlineComments',
+         'annotationsPerPage'],
         data => sendResponse({ ok: true, settings: data })
       );
       return true;
@@ -106,15 +107,37 @@ async function handleGradeSubmission(message, sendResponse) {
     // 4. Load settings
     const settings = await new Promise(resolve =>
       chrome.storage.sync.get([
-        'model', 'tone', 'customInstructions', 'feedbackLength', 'strictness',
-        'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay'
+        'tone', 'customInstructions', 'feedbackLength', 'strictness',
+        'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay', 'inlineComments',
+        'annotationsPerPage'
       ], resolve)
     );
 
-    // 5. POST to Katana backend — it calls Claude and returns the result
-    const katanaResult = await callKatanaAPI(authToken, submissionData, settings);
+    // 5. Strip docViewerUrl before sending to backend; fetch page count if annotating
+    const { docViewerUrl, ...submissionForApi } = submissionData;
+    if (settings.inlineComments && docViewerUrl) {
+      const pageCount = await getPageCountFromCanvadocs(tab.id).catch(() => null);
+      if (pageCount) submissionForApi.pageCount = pageCount;
+    }
 
-    // 6. Programmatically enforce grade cap
+    // 6. POST to Katana backend — it calls Claude and returns the result
+    const katanaResult = await callKatanaAPI(authToken, submissionForApi, settings);
+
+    // 7. Post inline annotations to Canvadocs (best-effort, non-blocking on grading)
+    let inlineAnnotationsPosted = 0;
+    if (settings.inlineComments && katanaResult.inline_comments?.length && docViewerUrl) {
+      try {
+        const jwtInfo = await resolveCanvadocJWT(docViewerUrl);
+        if (jwtInfo) {
+          const { posted } = await postCanvadocsAnnotations(jwtInfo, katanaResult.inline_comments, tab.id);
+          inlineAnnotationsPosted = posted;
+        }
+      } catch (e) {
+        console.warn('Katana: inline annotation posting failed', e.message);
+      }
+    }
+
+    // 9. Programmatically enforce grade cap
     const { gradingType, maxPoints } = submissionData.gradingSchema || {};
     if (gradingType === 'points' || gradingType === 'percent') {
       const rawMax = parseFloat(maxPoints);
@@ -127,7 +150,7 @@ async function handleGradeSubmission(message, sendResponse) {
       }
     }
 
-    // 7. Apply grade to Canvas via content script
+    // 10. Apply grade to Canvas via content script
     const applyResult = await sendToContentScript(tab.id, {
       type: 'APPLY_GRADE',
       grade: katanaResult.grade,
@@ -149,7 +172,8 @@ async function handleGradeSubmission(message, sendResponse) {
         confidence_reason: katanaResult.confidence_reason || null,
         applyWarning,
         studentName: submissionData.studentName,
-        assignmentTitle: submissionData.assignmentTitle
+        assignmentTitle: submissionData.assignmentTitle,
+        inlineAnnotationsPosted
       }
     });
 
@@ -207,5 +231,173 @@ function sendToContentScript(tabId, message) {
         resolve(response);
       }
     });
+  });
+}
+
+// ─── Canvadocs Inline Annotations ────────────────────────────────────────────
+
+// Fetches the Canvas canvadoc_session URL (with user credentials) and extracts
+// the Canvadocs JWT + base URL from the redirect destination.
+// The service worker bypasses CORS for *.instructure.com (host_permissions).
+async function resolveCanvadocJWT(canvadocSessionUrl) {
+  try {
+    const resp = await fetch(canvadocSessionUrl, {
+      credentials: 'include',
+      redirect: 'follow'
+    });
+    // After following the redirect, resp.url is the Canvadocs viewer URL:
+    // https://canvadocs.instructure.com/1/sessions/{JWT}/view?theme=dark
+    const url = new URL(resp.url);
+    if (!url.hostname.includes('canvadoc')) return null;
+    const match = url.pathname.match(/\/sessions\/([^/]+)\//);
+    if (!match) return null;
+    return { jwt: match[1], baseUrl: url.origin };
+  } catch (e) {
+    console.warn('Katana: could not resolve Canvadoc session JWT', e.message);
+    return null;
+  }
+}
+
+// Decodes the Canvadocs JWT (without verification) to extract document_id,
+// user_id, and user_name needed in the annotation body.
+function decodeCanvadocJWT(jwt) {
+  try {
+    const payload = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = payload + '=='.slice(payload.length % 4 || 4);
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+// PUTs highlight annotations (with point fallback) to Canvadocs on behalf of the instructor.
+// Queries the canvadocs content script for exact text positions; falls back to
+// a staggered point annotation if the quoted text can't be located in the rendered page.
+async function postCanvadocsAnnotations(jwtInfo, inlineComments, tabId) {
+  const { jwt, baseUrl } = jwtInfo;
+  const payload = decodeCanvadocJWT(jwt);
+  if (!payload) return { posted: 0, failed: inlineComments.length };
+
+  const docId    = payload.d;
+  const userId   = payload.a?.u;
+  const userName = payload.a?.n;
+
+  // Ask the canvadocs content script for text positions
+  let textPositions = null;
+  if (tabId) {
+    const quotes = inlineComments.map(c => ({ quote: c.quote, page: c.page }));
+    textPositions = await getTextPositionsFromCanvadocs(tabId, quotes).catch(() => null);
+  }
+
+  // Pre-compute per-page fallback stagger indices for point annotations
+  const pageCount = {};
+  const pageIdx   = inlineComments.map((c, i) => {
+    const page = textPositions?.[i]?.found ? textPositions[i].page : (c.page || 1);
+    const idx = pageCount[page] || 0;
+    pageCount[page] = idx + 1;
+    return idx;
+  });
+
+  let posted = 0, failed = 0;
+
+  for (let i = 0; i < inlineComments.length; i++) {
+    const c   = inlineComments[i];
+    const pos = textPositions?.[i];
+    const id  = crypto.randomUUID();
+    const contents = c.quote ? `"${c.quote}"\n\n${c.comment}` : c.comment;
+
+    let body;
+
+    if (pos?.found && pos.coords?.length === 8) {
+      // Highlight annotation — tied to actual text
+      body = {
+        id,
+        document_id: docId,
+        user_id:     userId,
+        user_name:   userName,
+        type:        'highlight',
+        page:        pos.page - 1, // 0-indexed
+        contents,
+        color:       '#f7c948',    // amber highlight
+        coords:      pos.coords
+      };
+    } else {
+      // Point annotation fallback — staggered vertically on the page
+      body = {
+        id,
+        document_id: docId,
+        user_id:     userId,
+        user_name:   userName,
+        type:        'point',
+        page:        Math.max(0, (c.page || 1) - 1), // 0-indexed
+        contents,
+        color:       '#f7c948',
+        rect:        { top: 60 + pageIdx[i] * 110, left: 30, width: 14, height: 18 }
+      };
+    }
+
+    try {
+      const resp = await fetch(
+        `${baseUrl}/2018-03-07/sessions/${jwt}/annotations/${id}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          credentials: 'include'
+        }
+      );
+      if (resp.ok) { posted++; }
+      else { console.warn(`Katana: annotation PUT failed (${resp.status})`); failed++; }
+    } catch (e) {
+      console.warn('Katana: annotation PUT error', e.message);
+      failed++;
+    }
+  }
+
+  return { posted, failed };
+}
+
+// ─── Canvadocs Frame Helpers ──────────────────────────────────────────────────
+
+// Finds the frameId of the canvadocs.instructure.com iframe in the given tab.
+async function getCanvadocsFrameId(tabId) {
+  try {
+    const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    const frame  = frames?.find(f => f.url?.includes('canvadocs.instructure.com'));
+    return frame?.frameId ?? null;
+  } catch (e) {
+    console.warn('Katana: could not get canvadocs frame ID', e.message);
+    return null;
+  }
+}
+
+// Queries the canvadocs content script for the rendered page count.
+async function getPageCountFromCanvadocs(tabId) {
+  const frameId = await getCanvadocsFrameId(tabId);
+  if (frameId === null) return null;
+  return new Promise(resolve => {
+    chrome.tabs.sendMessage(tabId, { type: 'CANVADOCS_GET_PAGE_COUNT' }, { frameId }, response => {
+      if (chrome.runtime.lastError) { resolve(null); }
+      else { resolve(response?.count ?? null); }
+    });
+  });
+}
+
+// Queries the canvadocs content script for text positions of the given quotes.
+// quotes: [{quote: string, page: number}]
+// Returns: [{found: bool, page: number, coords: number[8]} | {found: false}]
+async function getTextPositionsFromCanvadocs(tabId, quotes) {
+  const frameId = await getCanvadocsFrameId(tabId);
+  if (frameId === null) return null;
+  return new Promise(resolve => {
+    chrome.tabs.sendMessage(
+      tabId,
+      { type: 'CANVADOCS_FIND_TEXT_POSITIONS', quotes },
+      { frameId },
+      response => {
+        if (chrome.runtime.lastError) { resolve(null); }
+        else { resolve(response?.results ?? null); }
+      }
+    );
   });
 }

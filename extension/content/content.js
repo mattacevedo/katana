@@ -167,8 +167,20 @@
       studentName,
       submission,
       dueAt: assignmentData?.due_at || null,
-      submittedAt: submissionObj?.submitted_at || null
+      submittedAt: submissionObj?.submitted_at || null,
+      docViewerUrl: getDocViewerUrl()
     };
+  }
+
+  // Returns the Canvas canvadoc_session URL from the DocViewer iframe src.
+  // The service worker fetches this (with credentials) to follow the redirect
+  // and extract the Canvadocs JWT from the final URL.
+  function getDocViewerUrl() {
+    const iframe = document.getElementById('submission-preview-iframe');
+    if (!iframe) return null;
+    const src = iframe.src || iframe.getAttribute('src') || '';
+    if (!src || !src.includes('canvadoc_session')) return null;
+    return src;
   }
 
   async function fetchSubmissionFromAPI() {
@@ -279,17 +291,25 @@
   }
 
   function getStudentName() {
-    const selectors = ['[data-testid="selected-student"]','[data-testid="student-name"]','[data-testid="students_selectmenu"] [class*="label"]','#students_selectmenu .ui-selectmenu-text span','#students_selectmenu .ui-selectmenu-text','#students_selectmenu-button .ui-selectmenu-item-header','#student_name','.student_name','#student-name'];
-    for (const sel of selectors) {
-      try { const el = document.querySelector(sel); const text = el?.textContent?.trim(); if (text && text !== 'Student' && text.length > 1) return text; } catch (_) {}
-    }
+    // Prefer ENV / jsonData — these contain the full name reliably
     const envName = window.ENV?.student_name || window.ENV?.SUBMISSION_DETAILS?.student_name || window.ENV?.RUBRIC_ASSESSMENT?.student?.name;
     if (envName) return envName;
     try {
       const jd = window.jsonData;
       if (jd?.studentInformation?.name) return jd.studentInformation.name;
-      if (jd?.context?.students) { const currentId = window.ENV?.SUBMISSION?.user_id || window.ENV?.student_id; if (currentId) { const student = jd.context.students.find(s => String(s.id) === String(currentId)); if (student?.name) return student.name; } }
+      if (jd?.context?.students) {
+        const currentId = window.ENV?.SUBMISSION?.user_id || window.ENV?.student_id;
+        if (currentId) {
+          const student = jd.context.students.find(s => String(s.id) === String(currentId));
+          if (student?.name) return student.name;
+        }
+      }
     } catch (_) {}
+    // Fall back to DOM selectors (may only have first name in some Canvas builds)
+    const selectors = ['[data-testid="selected-student"]','[data-testid="student-name"]','[data-testid="students_selectmenu"] [class*="label"]','#students_selectmenu .ui-selectmenu-text span','#students_selectmenu .ui-selectmenu-text','#students_selectmenu-button .ui-selectmenu-item-header','#student_name','.student_name','#student-name'];
+    for (const sel of selectors) {
+      try { const el = document.querySelector(sel); const text = el?.textContent?.trim(); if (text && text !== 'Student' && text.length > 1) return text; } catch (_) {}
+    }
     return 'Student';
   }
 

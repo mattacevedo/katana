@@ -20,7 +20,7 @@ const PLAN_LIMITS: Record<string, number> = {
 };
 
 // ─── Allowlists ───────────────────────────────────────────────────────────
-const ALLOWED_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-5']);
+const ALLOWED_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001']);
 const ALLOWED_MIME_TYPES = new Set(['application/pdf']);
 const MAX_CUSTOM_INSTRUCTIONS  = 1000;           // chars
 const MAX_FILE_BYTES           = 20 * 1024 * 1024; // 20 MB per attachment
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
 
   let result: GradeResult;
   try {
-    result = await callClaude(systemPrompt, userMessage, fileAttachments, settings.model);
+    result = await callClaude(systemPrompt, userMessage, fileAttachments, settings.model, settings.inlineComments, submissionData.pageCount);
   } catch (err: unknown) {
     // Roll back the quota slot we just claimed — Claude failed, grade not consumed.
     // increment_grade_count_v2 uses plan quota first, then bonus grades.
@@ -221,7 +221,9 @@ async function callClaude(
   systemPrompt: string,
   userMessage: string,
   fileAttachments: FileAttachment[],
-  model = 'claude-sonnet-4-6'
+  model = 'claude-sonnet-4-6',
+  inlineComments = false,
+  pageCount?: number
 ): Promise<GradeResult> {
   // Defence-in-depth: enforce allowlist even if caller skips prior validation
   const safeModel = ALLOWED_MODELS.has(model) ? model : 'claude-sonnet-4-6';
@@ -235,9 +237,17 @@ async function callClaude(
       ]
     : userMessage;
 
+  // Scale token budget with annotation count
+  let maxTokens = 2048;
+  if (inlineComments) {
+    const annotationCount = pageCount ? Math.max(2, Math.round(pageCount)) : 6;
+    maxTokens = 2048 + annotationCount * 120; // ~120 tokens per annotation
+    maxTokens = Math.min(maxTokens, 6000);
+  }
+
   const response = await anthropic.messages.create({
     model: safeModel,
-    max_tokens: 2048,
+    max_tokens: maxTokens,
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }],
     ...(fileAttachments.length > 0 ? { betas: ['pdfs-2024-09-25'] } : {})
@@ -308,12 +318,40 @@ function buildPrompts(data: SubmissionData, settings: GradingSettings) {
     default: schemaDesc = `points — a number from 0 to ${maxPoints || 100}.`;
   }
 
+    const annotationsPerPage = settings.annotationsPerPage ?? 1;
+    const annotationTarget   = data.pageCount
+      ? Math.min(Math.max(2, Math.round(data.pageCount * annotationsPerPage)), 16)
+      : Math.max(2, Math.round(4 * annotationsPerPage)); // default 4-page estimate
+
+    const inlineCommentsInstruction = settings.inlineComments ? `
+
+INLINE ANNOTATIONS:
+The feedback above gives the big-picture evaluation. Inline annotations give line-level observations that complement — not repeat — that feedback.
+
+Generate ${annotationTarget} annotations. Aim for roughly 40% highlighting strengths and 60% identifying growth areas; always include at least 2 strength annotations.
+
+For each annotation:
+- Quote 5–20 words verbatim from the submission (exact text the student wrote)
+- Write a 1–3 sentence comment that:
+  • Describes what the passage does or achieves — describe effect, not judgment ("this leaves the reader wondering..." not "this is unclear")
+  • Connects the observation to the assignment criteria or a learning goal
+  • Ends with a reflective prompt or concrete next-step to encourage self-assessment (e.g., "What would happen if you...?" or "Try [specific suggestion] in the next draft.")
+  • Matches the feedback tone — ${toneDescriptions[tone]}
+  • Uses supportive, nonjudgmental language even when identifying gaps
+  • Frames improvements as opportunities: "to strengthen this further..." not "this is wrong"
+- Provide the page number (1-indexed) where the quote appears
+
+Only generate annotations if file attachments are present. For text-only submissions, set inline_comments to [].
+
+Add to your JSON response:
+"inline_comments": [{"page": <number>, "quote": "<verbatim text>", "comment": "<annotation>"}]` : '';
+
   const systemPrompt = `You are helping an instructor write feedback for student work. Write as if the instructor is speaking directly to the student.
 
 Grading schema: ${schemaDesc}
 Grading strictness: ${strictnessDescriptions[strictness]}
 Feedback tone: ${toneDescriptions[tone]}
-Feedback length: ${feedbackLengthDescriptions[feedbackLength]}${greetingInstruction}${settings.customInstructions ? `\nAdditional instructor instructions: ${settings.customInstructions}` : ''}
+Feedback length: ${feedbackLengthDescriptions[feedbackLength]}${greetingInstruction}${settings.customInstructions ? `\nAdditional instructor instructions: ${settings.customInstructions}` : ''}${inlineCommentsInstruction}
 
 CRITICAL WRITING RULES:
 - Never use the em dash character (—).
@@ -327,11 +365,12 @@ Respond ONLY with valid JSON:
   "rubric_ratings": [{"criterion_id": "...", "points": <number>, "comments": "..."}],
   "grading_rationale": "<2-4 sentence internal explanation for the instructor>",
   "confidence": "<high | medium | low>",
-  "confidence_reason": "<one sentence, only if confidence is medium or low>"
+  "confidence_reason": "<one sentence, only if confidence is medium or low>"${settings.inlineComments ? `,
+  "inline_comments": [{"page": <number>, "quote": "<verbatim short quote>", "comment": "<annotation>"}]` : ''}
 }
 
 If no rubric is present, set rubric_ratings to [].
-Omit confidence_reason entirely if confidence is high.`;
+Omit confidence_reason entirely if confidence is high.${settings.inlineComments ? '\nIf no file attachments are present, set inline_comments to [].' : ''}`;
 
   let rubricSection = 'No rubric provided.';
   if (data.rubric?.criteria?.length) {
@@ -383,6 +422,7 @@ interface SubmissionData {
   submission?: { type: string; content?: string; fileAttachments?: FileAttachment[] };
   dueAt?: string;
   submittedAt?: string;
+  pageCount?: number;
 }
 
 interface GradingSettings {
@@ -394,7 +434,11 @@ interface GradingSettings {
   customInstructions?: string;
   lateDeduction?: boolean;
   lateDeductionPerDay?: number;
+  inlineComments?: boolean;
+  annotationsPerPage?: number;
 }
+
+interface InlineComment { page: number; quote: string; comment: string; }
 
 interface GradeResult {
   grade: string;
@@ -403,4 +447,5 @@ interface GradeResult {
   grading_rationale: string;
   confidence: 'high' | 'medium' | 'low';
   confidence_reason?: string;
+  inline_comments?: InlineComment[];
 }

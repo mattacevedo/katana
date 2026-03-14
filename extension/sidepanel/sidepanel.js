@@ -61,13 +61,32 @@ async function loadAuthState() {
     cardIn.classList.remove('hidden');
     cardOut.classList.add('hidden');
     document.getElementById('account-email').textContent = auth.userEmail || 'Signed in';
-    document.getElementById('account-plan').textContent  = auth.plan ? `Plan: ${auth.plan}` : '';
+    const planDisplay = auth.plan ? auth.plan.charAt(0).toUpperCase() + auth.plan.slice(1) : '';
+    document.getElementById('account-plan').textContent  = planDisplay ? `Plan: ${planDisplay}` : '';
+    // Fetch live quota (non-blocking)
+    fetchAndDisplayQuota(auth.authToken);
   } else {
     cardIn.classList.add('hidden');
     cardOut.classList.remove('hidden');
   }
 
   return isSignedIn;
+}
+
+async function fetchAndDisplayQuota(authToken) {
+  const quotaEl = document.getElementById('account-quota');
+  if (!quotaEl) return;
+  try {
+    const resp = await fetch(`${APP_BASE}/api/quota`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const { remaining, limit } = data;
+    if (typeof remaining === 'number' && typeof limit === 'number') {
+      quotaEl.textContent = `${remaining} of ${limit} grades remaining this period`;
+    }
+  } catch (_) {}
 }
 
 // Watch for auth changes (e.g. sign-in from another tab)
@@ -89,7 +108,16 @@ async function checkCurrentPage() {
     if (!isSpeedGrader) { setState('wrong-page'); return; }
 
     try {
-      const info = await sendToContentScript({ type: 'GET_PAGE_INFO' });
+      let info = await sendToContentScript({ type: 'GET_PAGE_INFO' }).catch(() => null);
+      if (!info?.ok) {
+        // Content script not yet injected into this already-loaded tab — inject it now
+        try {
+          await chrome.scripting.executeScript({ target: { tabId: currentTabId }, files: ['content/content.js'] });
+          await chrome.scripting.insertCSS({ target: { tabId: currentTabId }, files: ['content/content.css'] }).catch(() => {});
+          await new Promise(r => setTimeout(r, 300));
+          info = await sendToContentScript({ type: 'GET_PAGE_INFO' }).catch(() => null);
+        } catch (_inject) {}
+      }
       if (info?.ok) document.getElementById('student-name').textContent = info.studentName || 'Loading…';
     } catch (_) {}
 
@@ -192,6 +220,17 @@ function displayResults(result) {
     warning.classList.add('hidden');
   }
 
+  const annotationRow = document.getElementById('result-annotations-row');
+  const annotationText = document.getElementById('result-annotations-text');
+  if (result.inlineAnnotationsPosted > 0) {
+    if (annotationRow && annotationText) {
+      annotationText.textContent = `${result.inlineAnnotationsPosted} inline annotation${result.inlineAnnotationsPosted === 1 ? '' : 's'} added to document`;
+      annotationRow.classList.remove('hidden');
+    }
+  } else if (annotationRow) {
+    annotationRow.classList.add('hidden');
+  }
+
   setState('results');
 }
 
@@ -222,13 +261,17 @@ document.getElementById('late-deduction').addEventListener('change', e => {
   document.getElementById('late-deduction-controls').classList.toggle('hidden', !e.target.checked);
 });
 
+document.getElementById('inline-comments').addEventListener('change', e => {
+  document.getElementById('annotations-density-controls').classList.toggle('hidden', !e.target.checked);
+});
+
 async function loadSettings() {
   const settings = await chrome.storage.sync.get([
-    'model', 'tone', 'customInstructions', 'feedbackLength', 'strictness',
-    'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay'
+    'tone', 'customInstructions', 'feedbackLength', 'strictness',
+    'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay', 'inlineComments',
+    'annotationsPerPage'
   ]);
 
-  if (settings.model) document.getElementById('model-select').value = settings.model;
   if (settings.tone)  document.getElementById('tone-select').value = settings.tone;
   if (settings.customInstructions) document.getElementById('custom-instructions').value = settings.customInstructions;
 
@@ -245,18 +288,23 @@ async function loadSettings() {
   document.getElementById('late-deduction').checked = lateDeduction;
   document.getElementById('late-deduction-controls').classList.toggle('hidden', !lateDeduction);
   document.getElementById('late-deduction-per-day').value = settings.lateDeductionPerDay || 10;
+  const inlineComments = !!settings.inlineComments;
+  document.getElementById('inline-comments').checked = inlineComments;
+  document.getElementById('annotations-density-controls').classList.toggle('hidden', !inlineComments);
+  document.getElementById('annotations-per-page').value = settings.annotationsPerPage ?? 1;
 }
 
 document.getElementById('btn-save-settings').addEventListener('click', async () => {
   const payload = {
-    model: document.getElementById('model-select').value,
     tone: document.getElementById('tone-select').value,
     customInstructions: document.getElementById('custom-instructions').value.trim(),
     feedbackLength: parseInt(document.getElementById('feedback-length').value, 10),
     strictness: parseInt(document.getElementById('strictness').value, 10),
     greetByFirstName: document.getElementById('greet-first-name').checked,
     lateDeduction: document.getElementById('late-deduction').checked,
-    lateDeductionPerDay: parseInt(document.getElementById('late-deduction-per-day').value, 10) || 10
+    lateDeductionPerDay: parseInt(document.getElementById('late-deduction-per-day').value, 10) || 10,
+    inlineComments: document.getElementById('inline-comments').checked,
+    annotationsPerPage: parseFloat(document.getElementById('annotations-per-page').value) || 1
   };
 
   const btn = document.getElementById('btn-save-settings');

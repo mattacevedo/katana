@@ -9,7 +9,8 @@
     "scripting",
     "storage",
     "sidePanel",
-    "identity"
+    "identity",
+    "webNavigation"
   ],
 
   "host_permissions": [
@@ -33,6 +34,12 @@
       "css": ["content/content.css"],
       "run_at": "document_idle",
       "all_frames": false
+    },
+    {
+      "matches": ["*://canvadocs.instructure.com/*"],
+      "js": ["content/canvadocs.js"],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
 
