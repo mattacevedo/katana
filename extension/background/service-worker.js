@@ -274,11 +274,15 @@ function decodeCanvadocJWT(jwt) {
 async function postCanvadocsAnnotations(jwtInfo, inlineComments, tabId) {
   const { jwt, baseUrl } = jwtInfo;
   const payload = decodeCanvadocJWT(jwt);
-  if (!payload) return { posted: 0, failed: inlineComments.length };
 
-  const docId    = payload.d;
-  const userId   = payload.a?.u;
-  const userName = payload.a?.n;
+  // Try multiple field-name conventions used by different Canvas/Canvadocs versions.
+  // If decode completely failed, proceed with undefined fields — Canvadocs may still accept.
+  const docId    = payload?.d    ?? payload?.document_id ?? undefined;
+  const userId   = payload?.a?.u ?? payload?.sub         ?? payload?.user_id   ?? undefined;
+  const userName = payload?.a?.n ?? payload?.user_name   ?? payload?.name      ?? undefined;
+
+  console.log('Katana: Canvadocs JWT payload', JSON.stringify(payload));
+  console.log('Katana: posting', inlineComments.length, 'annotations to', baseUrl, '— docId:', docId, 'userId:', userId);
 
   // Ask the canvadocs content script for text positions
   let textPositions = null;
@@ -344,8 +348,14 @@ async function postCanvadocsAnnotations(jwtInfo, inlineComments, tabId) {
           credentials: 'include'
         }
       );
-      if (resp.ok) { posted++; }
-      else { console.warn(`Katana: annotation PUT failed (${resp.status})`); failed++; }
+      if (resp.ok) {
+        posted++;
+        console.log(`Katana: annotation ${i + 1} posted OK`);
+      } else {
+        const errBody = await resp.text().catch(() => '');
+        console.warn(`Katana: annotation PUT failed (${resp.status})`, errBody.substring(0, 200));
+        failed++;
+      }
     } catch (e) {
       console.warn('Katana: annotation PUT error', e.message);
       failed++;

@@ -487,7 +487,7 @@
     const errors = [];
     try { await fillGradeField(grade); } catch (e) { errors.push(`Grade fill failed: ${e.message}`); }
     try { fillFeedbackField(feedback); } catch (e) { errors.push(`Feedback fill failed: ${e.message}`); }
-    if (rubricRatings && rubricRatings.length > 0) { try { fillRubric(rubricRatings); } catch (e) { errors.push(`Rubric fill failed: ${e.message}`); } }
+    if (rubricRatings && rubricRatings.length > 0) { try { await fillRubric(rubricRatings); } catch (e) { errors.push(`Rubric fill failed: ${e.message}`); } }
     if (errors.length > 0) throw new Error(errors.join('; '));
   }
 
@@ -565,18 +565,81 @@
     throw new Error('Feedback field not found (no TinyMCE iframe or plain textarea)');
   }
 
-  function fillRubric(rubricRatings) {
-    const container = document.querySelector('#rubric_full, .rubric_container, #rubric_holder');
-    if (!container) return;
-    rubricRatings.forEach(({ criterion_id, points, comments }) => {
-      const criterionEl = container.querySelector(`.criterion[data-criterion-id="${criterion_id}"], #criterion_${criterion_id}`);
-      if (!criterionEl) { console.warn(`Katana: criterion ${criterion_id} not found in rubric`); return; }
-      const ratingEls = criterionEl.querySelectorAll('.rating[data-rating-id], .rating');
-      let bestMatch = null; let bestDiff = Infinity;
-      ratingEls.forEach(ratingEl => { const ptsEl = ratingEl.querySelector('.points'); const diff = Math.abs((parseFloat(ptsEl?.textContent?.trim()) || 0) - points); if (diff < bestDiff) { bestDiff = diff; bestMatch = ratingEl; } });
-      if (bestMatch) { bestMatch.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); bestMatch.click(); bestMatch.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true })); }
-      if (comments) { const commentsTextarea = criterionEl.querySelector('textarea.criterion_comments, input.criterion_comments, .custom_rating_comments textarea'); if (commentsTextarea) setReactTextareaValue(commentsTextarea, comments); }
-    });
+  async function fillRubric(rubricRatings) {
+    // ── Step 1: ensure rubric panel is visible ──────────────────────────
+    // Canvas often hides the rubric until the instructor expands it.
+    const rubricArea = document.querySelector('#rubric_full, #rubric_holder, .rubric_container');
+    const isHidden = rubricArea && (
+      rubricArea.style.display === 'none' ||
+      rubricArea.classList.contains('hidden') ||
+      window.getComputedStyle(rubricArea).display === 'none'
+    );
+    if (isHidden || !rubricArea) {
+      // Try all known toggle selectors
+      const toggle = document.querySelector(
+        '#rubric_toggle, a.toggle_rubric_assessments, [data-testid="toggle-rubric-btn"], ' +
+        'a[href="#rubric_full"], button[aria-controls="rubric_full"], ' +
+        '.rubric_title a, #rubric_holder a.expand_rubric_link'
+      );
+      if (toggle) {
+        toggle.click();
+        await new Promise(r => setTimeout(r, 400)); // wait for animation
+      }
+    }
+
+    // ── Step 2: find the rubric container ──────────────────────────────
+    const container = document.querySelector(
+      '#rubric_full, .rubric_container, #rubric_holder, ' +
+      '[data-testid="rubric-assessment-container"], [data-component="RubricAssessmentContainer"]'
+    );
+    if (!container) { console.warn('Katana: rubric container not found'); return; }
+
+    // ── Step 3: fill each criterion ────────────────────────────────────
+    for (const { criterion_id, points, comments } of rubricRatings) {
+      // Support both underscore-prefixed and plain IDs
+      const criterionEl = container.querySelector(
+        `.criterion[data-criterion-id="${criterion_id}"], ` +
+        `#criterion_${criterion_id}, ` +
+        `tr[data-criterion-id="${criterion_id}"], ` +
+        `[data-testid="criterion-row"][data-criterion-id="${criterion_id}"]`
+      );
+      if (!criterionEl) { console.warn(`Katana: criterion ${criterion_id} not found`); continue; }
+
+      // Find rating elements — legacy divs, table cells, or modern buttons
+      const ratingEls = criterionEl.querySelectorAll(
+        '.rating[data-rating-id], .rating, td.rating, ' +
+        '[data-testid="rating-button"], button[data-points], ' +
+        '[role="radio"], [role="button"][data-criterion-id]'
+      );
+
+      // Pick the rating whose points value is closest to the target
+      let bestMatch = null;
+      let bestDiff = Infinity;
+      ratingEls.forEach(el => {
+        // Try several ways to read the point value from the element
+        const ptsEl = el.querySelector('.points, .rating-points, [class*="point"], [data-points]');
+        const rawPts = el.dataset.points ?? ptsEl?.textContent?.trim() ?? el.getAttribute('data-points');
+        const diff = Math.abs((parseFloat(rawPts) || 0) - points);
+        if (diff < bestDiff) { bestDiff = diff; bestMatch = el; }
+      });
+
+      if (bestMatch) {
+        bestMatch.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        bestMatch.click();
+        bestMatch.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        await new Promise(r => setTimeout(r, 80)); // small gap between ratings
+      } else {
+        console.warn(`Katana: no matching rating found for criterion ${criterion_id} (${points} pts)`);
+      }
+
+      if (comments) {
+        const commentsTextarea = criterionEl.querySelector(
+          'textarea.criterion_comments, input.criterion_comments, ' +
+          '.custom_rating_comments textarea, [data-testid="criterion-comment-input"]'
+        );
+        if (commentsTextarea) setReactTextareaValue(commentsTextarea, comments);
+      }
+    }
   }
 
   // ─── Initialise ───────────────────────────────────────────────────────
