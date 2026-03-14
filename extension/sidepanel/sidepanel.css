@@ -278,6 +278,7 @@ details[open] .rationale-summary::before { content: '▼ '; }
 .account-info { display: flex; flex-direction: column; gap: 2px; }
 .account-email { font-size: 13px; font-weight: 600; color: #111827; }
 .account-plan { font-size: 11px; color: #6b7280; }
+.account-quota { font-size: 11px; color: #6b7280; }
 .account-signed-out-text { font-size: 12px; color: #6b7280; }
 
 .btn-signout {

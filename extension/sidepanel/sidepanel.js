@@ -61,13 +61,32 @@ async function loadAuthState() {
     cardIn.classList.remove('hidden');
     cardOut.classList.add('hidden');
     document.getElementById('account-email').textContent = auth.userEmail || 'Signed in';
-    document.getElementById('account-plan').textContent  = auth.plan ? `Plan: ${auth.plan}` : '';
+    const planDisplay = auth.plan ? auth.plan.charAt(0).toUpperCase() + auth.plan.slice(1) : '';
+    document.getElementById('account-plan').textContent  = planDisplay ? `Plan: ${planDisplay}` : '';
+    // Fetch live quota (non-blocking)
+    fetchAndDisplayQuota(auth.authToken);
   } else {
     cardIn.classList.add('hidden');
     cardOut.classList.remove('hidden');
   }
 
   return isSignedIn;
+}
+
+async function fetchAndDisplayQuota(authToken) {
+  const quotaEl = document.getElementById('account-quota');
+  if (!quotaEl) return;
+  try {
+    const resp = await fetch(`${APP_BASE}/api/quota`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const { remaining, limit } = data;
+    if (typeof remaining === 'number' && typeof limit === 'number') {
+      quotaEl.textContent = `${remaining} of ${limit} grades remaining this period`;
+    }
+  } catch (_) {}
 }
 
 // Watch for auth changes (e.g. sign-in from another tab)
@@ -89,7 +108,16 @@ async function checkCurrentPage() {
     if (!isSpeedGrader) { setState('wrong-page'); return; }
 
     try {
-      const info = await sendToContentScript({ type: 'GET_PAGE_INFO' });
+      let info = await sendToContentScript({ type: 'GET_PAGE_INFO' }).catch(() => null);
+      if (!info?.ok) {
+        // Content script not yet injected into this already-loaded tab — inject it now
+        try {
+          await chrome.scripting.executeScript({ target: { tabId: currentTabId }, files: ['content/content.js'] });
+          await chrome.scripting.insertCSS({ target: { tabId: currentTabId }, files: ['content/content.css'] }).catch(() => {});
+          await new Promise(r => setTimeout(r, 300));
+          info = await sendToContentScript({ type: 'GET_PAGE_INFO' }).catch(() => null);
+        } catch (_inject) {}
+      }
       if (info?.ok) document.getElementById('student-name').textContent = info.studentName || 'Loading…';
     } catch (_) {}
 
@@ -239,12 +267,11 @@ document.getElementById('inline-comments').addEventListener('change', e => {
 
 async function loadSettings() {
   const settings = await chrome.storage.sync.get([
-    'model', 'tone', 'customInstructions', 'feedbackLength', 'strictness',
+    'tone', 'customInstructions', 'feedbackLength', 'strictness',
     'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay', 'inlineComments',
     'annotationsPerPage'
   ]);
 
-  if (settings.model) document.getElementById('model-select').value = settings.model;
   if (settings.tone)  document.getElementById('tone-select').value = settings.tone;
   if (settings.customInstructions) document.getElementById('custom-instructions').value = settings.customInstructions;
 
@@ -269,7 +296,6 @@ async function loadSettings() {
 
 document.getElementById('btn-save-settings').addEventListener('click', async () => {
   const payload = {
-    model: document.getElementById('model-select').value,
     tone: document.getElementById('tone-select').value,
     customInstructions: document.getElementById('custom-instructions').value.trim(),
     feedbackLength: parseInt(document.getElementById('feedback-length').value, 10),

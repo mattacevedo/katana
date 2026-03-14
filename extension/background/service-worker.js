@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'GET_SETTINGS':
       chrome.storage.sync.get(
-        ['model', 'tone', 'customInstructions', 'feedbackLength', 'strictness',
+        ['tone', 'customInstructions', 'feedbackLength', 'strictness',
          'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay', 'inlineComments',
          'annotationsPerPage'],
         data => sendResponse({ ok: true, settings: data })
@@ -107,7 +107,7 @@ async function handleGradeSubmission(message, sendResponse) {
     // 4. Load settings
     const settings = await new Promise(resolve =>
       chrome.storage.sync.get([
-        'model', 'tone', 'customInstructions', 'feedbackLength', 'strictness',
+        'tone', 'customInstructions', 'feedbackLength', 'strictness',
         'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay', 'inlineComments',
         'annotationsPerPage'
       ], resolve)
