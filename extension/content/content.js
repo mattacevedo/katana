@@ -159,6 +159,12 @@
     const studentName = submissionObj?.user?.name || getStudentName();
     const submission = await getSubmissionContent(submissionObj);
 
+    console.log('Katana: collectSubmissionData —',
+      'rubric:', rubric ? `${rubric.criteria?.length} criteria` : 'null',
+      '| student:', studentName,
+      '| submissionType:', submission?.type,
+      '| hasFileAttachments:', (submission?.fileAttachments?.length ?? 0) > 0);
+
     return {
       assignmentTitle,
       assignmentInstructions,
@@ -291,21 +297,28 @@
   }
 
   function getStudentName() {
-    // Prefer ENV / jsonData — these contain the full name reliably
-    const envName = window.ENV?.student_name || window.ENV?.SUBMISSION_DETAILS?.student_name || window.ENV?.RUBRIC_ASSESSMENT?.student?.name;
-    if (envName) return envName;
+    // 1. Get student_id from URL (always present in SpeedGrader URLs)
+    const studentId = new URL(location.href).searchParams.get('student_id');
+
+    // 2. Look up full name in SpeedGrader's jsonData (most reliable)
     try {
       const jd = window.jsonData;
-      if (jd?.studentInformation?.name) return jd.studentInformation.name;
-      if (jd?.context?.students) {
-        const currentId = window.ENV?.SUBMISSION?.user_id || window.ENV?.student_id;
-        if (currentId) {
-          const student = jd.context.students.find(s => String(s.id) === String(currentId));
-          if (student?.name) return student.name;
-        }
+      if (jd && studentId) {
+        // studentsWithSubmissions is the primary SpeedGrader data array
+        const swsMatch = jd.studentsWithSubmissions?.find(s => String(s.id) === studentId);
+        if (swsMatch?.name) return swsMatch.name;
+        // context.students is the secondary array
+        const ctxMatch = jd.context?.students?.find(s => String(s.id) === studentId);
+        if (ctxMatch?.name) return ctxMatch.name;
       }
+      if (jd?.studentInformation?.name) return jd.studentInformation.name;
     } catch (_) {}
-    // Fall back to DOM selectors (may only have first name in some Canvas builds)
+
+    // 3. Try ENV fields
+    const envName = window.ENV?.student_name || window.ENV?.SUBMISSION_DETAILS?.student_name || window.ENV?.RUBRIC_ASSESSMENT?.student?.name;
+    if (envName) return envName;
+
+    // 4. Fall back to DOM selectors (may only have first name in some Canvas builds)
     const selectors = ['[data-testid="selected-student"]','[data-testid="student-name"]','[data-testid="students_selectmenu"] [class*="label"]','#students_selectmenu .ui-selectmenu-text span','#students_selectmenu .ui-selectmenu-text','#students_selectmenu-button .ui-selectmenu-item-header','#student_name','.student_name','#student-name'];
     for (const sel of selectors) {
       try { const el = document.querySelector(sel); const text = el?.textContent?.trim(); if (text && text !== 'Student' && text.length > 1) return text; } catch (_) {}
@@ -484,6 +497,8 @@
   // ═══════════════════════════════════════════════════════════════════════
 
   async function applyGrade({ grade, feedback, rubricRatings }) {
+    console.log('Katana: applyGrade —', 'grade:', grade, '| rubricRatings:', rubricRatings?.length ?? 0,
+      rubricRatings?.length ? rubricRatings.map(r => `${r.criterion_id}=${r.points}pts`).join(', ') : '(none)');
     const errors = [];
     try { await fillGradeField(grade); } catch (e) { errors.push(`Grade fill failed: ${e.message}`); }
     try { fillFeedbackField(feedback); } catch (e) { errors.push(`Feedback fill failed: ${e.message}`); }
@@ -615,6 +630,12 @@
       '[data-testid="enhanced-rubric-assessment-container"]'
     );
     if (!container) { console.warn('Katana: rubric container not found'); return; }
+    console.log('Katana: fillRubric — container found:', container.tagName, container.className?.substring(0, 80));
+
+    // Log all criterion-like elements in the container for debugging
+    const allCriteria = container.querySelectorAll('tr[id^="criterion_"], .criterion, [data-criterion-id]');
+    console.log('Katana: fillRubric — criterion elements in DOM:', allCriteria.length,
+      Array.from(allCriteria).map(el => el.id || el.dataset?.criterionId || el.className).join(', '));
 
     // ── Step 3: fill each criterion ────────────────────────────────────
     for (const { criterion_id, points, comments } of rubricRatings) {
@@ -626,7 +647,11 @@
         `.criterion[data-criterion-id="${criterion_id}"], ` +
         `tr[data-criterion-id="${criterion_id}"]`
       );
-      if (!criterionEl) { console.warn(`Katana: criterion ${criterion_id} not found`); continue; }
+      if (!criterionEl) {
+        console.warn(`Katana: criterion "${criterion_id}" not found — tried #criterion_${criterion_id}`);
+        continue;
+      }
+      console.log(`Katana: fillRubric — found criterion ${criterion_id}, tag=${criterionEl.tagName}, id=${criterionEl.id}`);
 
       // Classic rubric: div.rating-tier inside each <td>
       // Enhanced: [data-testid^="rubric-rating-button-"]
@@ -634,6 +659,7 @@
         'div.rating-tier, .rating-tier, .rating, td.rating, ' +
         '[data-testid^="rubric-rating-button-"], button[data-points]'
       );
+      console.log(`Katana: fillRubric — ${ratingEls.length} rating elements found for criterion ${criterion_id}`);
 
       // Pick the rating closest to the target points
       let bestMatch = null;
@@ -649,6 +675,7 @@
       });
 
       if (bestMatch) {
+        console.log(`Katana: fillRubric — clicking rating for criterion ${criterion_id} (target=${points}pts, matched=${bestDiff === 0 ? 'exact' : `diff=${bestDiff}`})`);
         // Canvas React rubric responds to Event('click') with bubbles: true
         bestMatch.dispatchEvent(new Event('click', { bubbles: true }));
         await new Promise(r => setTimeout(r, 100));
