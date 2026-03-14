@@ -566,78 +566,104 @@
   }
 
   async function fillRubric(rubricRatings) {
+    // Helper: wait for an element to appear in the DOM (MutationObserver)
+    function waitForEl(sel, ms = 3000) {
+      return new Promise(resolve => {
+        const el = document.querySelector(sel);
+        if (el) { resolve(el); return; }
+        const t = setTimeout(() => { obs.disconnect(); resolve(null); }, ms);
+        const obs = new MutationObserver(() => {
+          const found = document.querySelector(sel);
+          if (found) { obs.disconnect(); clearTimeout(t); resolve(found); }
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+      });
+    }
+
     // ── Step 1: ensure rubric panel is visible ──────────────────────────
-    // Canvas often hides the rubric until the instructor expands it.
-    const rubricArea = document.querySelector('#rubric_full, #rubric_holder, .rubric_container');
-    const isHidden = rubricArea && (
-      rubricArea.style.display === 'none' ||
-      rubricArea.classList.contains('hidden') ||
-      window.getComputedStyle(rubricArea).display === 'none'
-    );
-    if (isHidden || !rubricArea) {
-      // Try all known toggle selectors
+    // Canvas hides the rubric by default — instructor must click "View Rubric".
+    const rubricFull = document.querySelector('#rubric_full');
+    const isHidden = !rubricFull ||
+      rubricFull.style.display === 'none' ||
+      rubricFull.classList.contains('hidden') ||
+      window.getComputedStyle(rubricFull).display === 'none';
+
+    if (isHidden) {
+      // Canvas SpeedGrader uses .toggle_full_rubric for the "View Rubric" button
       const toggle = document.querySelector(
-        '#rubric_toggle, a.toggle_rubric_assessments, [data-testid="toggle-rubric-btn"], ' +
-        'a[href="#rubric_full"], button[aria-controls="rubric_full"], ' +
-        '.rubric_title a, #rubric_holder a.expand_rubric_link'
+        '.toggle_full_rubric, button.assess_submission_link, ' +
+        '#rubric_assessments_list_and_edit_button_holder .edit, ' +
+        'a.toggle_rubric_assessments'
       );
       if (toggle) {
         toggle.click();
-        await new Promise(r => setTimeout(r, 400)); // wait for animation
+        await waitForEl(
+          '.rubric_container.assessing, .rubric_container, ' +
+          '[data-testid="enhanced-rubric-assessment-container"]',
+          3000
+        );
       }
     }
 
     // ── Step 2: find the rubric container ──────────────────────────────
+    // Classic: #rubric_full .rubric_container.assessing  (.assessing = assessment mode)
+    // Enhanced: [data-testid="enhanced-rubric-assessment-container"]
     const container = document.querySelector(
-      '#rubric_full, .rubric_container, #rubric_holder, ' +
-      '[data-testid="rubric-assessment-container"], [data-component="RubricAssessmentContainer"]'
+      '#rubric_full .rubric_container.assessing, ' +
+      '#rubric_full .rubric_container, ' +
+      '.rubric_container, #rubric_full, #rubric_holder, ' +
+      '[data-testid="enhanced-rubric-assessment-container"]'
     );
     if (!container) { console.warn('Katana: rubric container not found'); return; }
 
     // ── Step 3: fill each criterion ────────────────────────────────────
     for (const { criterion_id, points, comments } of rubricRatings) {
-      // Support both underscore-prefixed and plain IDs
+      // Canvas uses id="criterion_{id}" on <tr> elements (classic rubric).
+      // Also try data-criterion-id for enhanced rubric.
       const criterionEl = container.querySelector(
-        `.criterion[data-criterion-id="${criterion_id}"], ` +
         `#criterion_${criterion_id}, ` +
-        `tr[data-criterion-id="${criterion_id}"], ` +
-        `[data-testid="criterion-row"][data-criterion-id="${criterion_id}"]`
+        `tr#criterion_${criterion_id}, ` +
+        `.criterion[data-criterion-id="${criterion_id}"], ` +
+        `tr[data-criterion-id="${criterion_id}"]`
       );
       if (!criterionEl) { console.warn(`Katana: criterion ${criterion_id} not found`); continue; }
 
-      // Find rating elements — legacy divs, table cells, or modern buttons
+      // Classic rubric: div.rating-tier inside each <td>
+      // Enhanced: [data-testid^="rubric-rating-button-"]
       const ratingEls = criterionEl.querySelectorAll(
-        '.rating[data-rating-id], .rating, td.rating, ' +
-        '[data-testid="rating-button"], button[data-points], ' +
-        '[role="radio"], [role="button"][data-criterion-id]'
+        'div.rating-tier, .rating-tier, .rating, td.rating, ' +
+        '[data-testid^="rubric-rating-button-"], button[data-points]'
       );
 
-      // Pick the rating whose points value is closest to the target
+      // Pick the rating closest to the target points
       let bestMatch = null;
       let bestDiff = Infinity;
       ratingEls.forEach(el => {
-        // Try several ways to read the point value from the element
-        const ptsEl = el.querySelector('.points, .rating-points, [class*="point"], [data-points]');
-        const rawPts = el.dataset.points ?? ptsEl?.textContent?.trim() ?? el.getAttribute('data-points');
-        const diff = Math.abs((parseFloat(rawPts) || 0) - points);
+        const ptsEl = el.querySelector('.rating-points, .points, [class*="points"]');
+        const rawPts = ptsEl?.textContent?.trim().replace(/[^0-9.-]/g, '') ||
+                       el.dataset.points || '';
+        const numPts = parseFloat(rawPts);
+        if (isNaN(numPts)) return;
+        const diff = Math.abs(numPts - points);
         if (diff < bestDiff) { bestDiff = diff; bestMatch = el; }
       });
 
       if (bestMatch) {
-        bestMatch.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-        bestMatch.click();
-        bestMatch.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-        await new Promise(r => setTimeout(r, 80)); // small gap between ratings
+        // Canvas React rubric responds to Event('click') with bubbles: true
+        bestMatch.dispatchEvent(new Event('click', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 100));
       } else {
-        console.warn(`Katana: no matching rating found for criterion ${criterion_id} (${points} pts)`);
+        console.warn(`Katana: no rating match for criterion ${criterion_id} (${points} pts)`);
       }
 
+      // Comments: enhanced rubric has inline textareas; classic uses a dialog
       if (comments) {
-        const commentsTextarea = criterionEl.querySelector(
-          'textarea.criterion_comments, input.criterion_comments, ' +
-          '.custom_rating_comments textarea, [data-testid="criterion-comment-input"]'
+        const commentArea = criterionEl.querySelector(
+          `[data-testid="comment-text-area-${criterion_id}"], ` +
+          `[data-testid="free-form-comment-area-${criterion_id}"], ` +
+          'textarea.criterion_comments, .custom_rating_comments textarea'
         );
-        if (commentsTextarea) setReactTextareaValue(commentsTextarea, comments);
+        if (commentArea) setReactTextareaValue(commentArea, comments);
       }
     }
   }

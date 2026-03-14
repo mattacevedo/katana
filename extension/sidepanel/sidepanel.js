@@ -1,11 +1,11 @@
 // sidepanel/sidepanel.js
 // KEY DIFFERENCE from prototype: auth token instead of API key.
-// Sign-in opens app.katana.app; the web app passes the token back via
-// a content script on app.katana.app/auth/callback?token=xxx
+// Sign-in opens gradewithkatana.com; the web app passes the token back via
+// chrome.runtime.sendMessage from the extension-callback page.
 
 'use strict';
 
-const APP_BASE = 'https://katana-woad.vercel.app';
+const APP_BASE = 'https://www.gradewithkatana.com';
 
 // ─── Keep the service worker alive ────────────────────────────────────────
 let keepAlivePort = null;

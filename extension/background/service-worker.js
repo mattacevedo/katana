@@ -5,7 +5,7 @@
 // we POST to https://katana-woad.vercel.app/api/grade — the backend handles
 // auth validation, quota enforcement, and the Claude API call.
 
-const KATANA_API_BASE = 'https://katana-woad.vercel.app';
+const KATANA_API_BASE = 'https://www.gradewithkatana.com';
 
 // ─── Keep the service worker alive while the side panel is open ─────────────
 chrome.runtime.onConnect.addListener(port => {
@@ -27,7 +27,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
   if (message.type !== 'AUTH_TOKEN_RECEIVED') return;
 
   // Verify the message came from our web app
-  const allowedOrigins = ['https://katana-woad.vercel.app'];
+  const allowedOrigins = ['https://www.gradewithkatana.com', 'https://katana-woad.vercel.app'];
   if (!allowedOrigins.includes(sender.origin)) {
     sendResponse({ ok: false, error: 'Unauthorized origin.' });
     return;
@@ -115,26 +115,36 @@ async function handleGradeSubmission(message, sendResponse) {
 
     // 5. Strip docViewerUrl before sending to backend; fetch page count if annotating
     const { docViewerUrl: _docViewerUrl, ...submissionForApi } = submissionData;
+    console.log('Katana: settings.inlineComments =', settings.inlineComments);
     if (settings.inlineComments) {
       const pageCount = await getPageCountFromCanvadocs(tab.id).catch(() => null);
+      console.log('Katana: canvadocs pageCount =', pageCount);
       if (pageCount) submissionForApi.pageCount = pageCount;
     }
 
     // 6. POST to Katana backend — it calls Claude and returns the result
     const katanaResult = await callKatanaAPI(authToken, submissionForApi, settings);
+    console.log('Katana: backend returned inline_comments:', katanaResult.inline_comments?.length ?? 0);
 
     // 7. Post inline annotations to Canvadocs (best-effort, non-blocking on grading)
     let inlineAnnotationsPosted = 0;
     if (settings.inlineComments && katanaResult.inline_comments?.length) {
       try {
         const jwtInfo = await resolveCanvadocJWT(tab.id);
+        console.log('Katana: resolved JWT info:', jwtInfo ? `jwt=${jwtInfo.jwt.substring(0, 20)}… base=${jwtInfo.baseUrl}` : 'null');
         if (jwtInfo) {
           const { posted } = await postCanvadocsAnnotations(jwtInfo, katanaResult.inline_comments, tab.id);
           inlineAnnotationsPosted = posted;
+        } else {
+          console.warn('Katana: skipping annotations — no canvadocs JWT found in tab frames');
         }
       } catch (e) {
         console.warn('Katana: inline annotation posting failed', e.message);
       }
+    } else if (settings.inlineComments) {
+      console.log('Katana: backend returned 0 inline_comments — check if hasDocViewer was true on backend');
+    } else {
+      console.log('Katana: inline comments disabled in settings — skipping annotations');
     }
 
     // 9. Programmatically enforce grade cap

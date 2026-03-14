@@ -15,11 +15,12 @@
 
   "host_permissions": [
     "*://*.instructure.com/*",
+    "https://www.gradewithkatana.com/*",
     "https://katana-woad.vercel.app/*"
   ],
 
   "externally_connectable": {
-    "matches": ["https://katana-woad.vercel.app/*"]
+    "matches": ["https://www.gradewithkatana.com/*", "https://katana-woad.vercel.app/*"]
   },
 
   "background": {
