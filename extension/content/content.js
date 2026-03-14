@@ -167,8 +167,20 @@
       studentName,
       submission,
       dueAt: assignmentData?.due_at || null,
-      submittedAt: submissionObj?.submitted_at || null
+      submittedAt: submissionObj?.submitted_at || null,
+      docViewerUrl: getDocViewerUrl()
     };
+  }
+
+  // Returns the Canvas canvadoc_session URL from the DocViewer iframe src.
+  // The service worker fetches this (with credentials) to follow the redirect
+  // and extract the Canvadocs JWT from the final URL.
+  function getDocViewerUrl() {
+    const iframe = document.getElementById('submission-preview-iframe');
+    if (!iframe) return null;
+    const src = iframe.src || iframe.getAttribute('src') || '';
+    if (!src || !src.includes('canvadoc_session')) return null;
+    return src;
   }
 
   async function fetchSubmissionFromAPI() {

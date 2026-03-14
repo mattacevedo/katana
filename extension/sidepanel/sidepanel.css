@@ -216,6 +216,10 @@ details[open] .rationale-summary::before { content: '▼ '; }
 .apply-warning { display: flex; align-items: flex-start; gap: 8px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 7px; padding: 10px 12px; font-size: 12px; color: #991b1b; margin-bottom: 10px; line-height: 1.5; }
 .apply-warning-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
 
+/* ── Annotations notice ───────────────────────────────────────────────── */
+.annotations-notice { display: flex; align-items: flex-start; gap: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 7px; padding: 10px 12px; font-size: 12px; color: #166534; margin-bottom: 10px; line-height: 1.5; }
+.annotations-notice-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
 /* ── Action hint ──────────────────────────────────────────────────────── */
 .action-hint-box { display: flex; align-items: flex-start; gap: 8px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 7px; padding: 10px 12px; font-size: 12px; color: #1e40af; margin-bottom: 4px; line-height: 1.5; }
 .action-hint-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
