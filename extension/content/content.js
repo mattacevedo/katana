@@ -596,7 +596,6 @@
     }
 
     // ── Step 1: ensure rubric panel is visible ──────────────────────────
-    // Canvas hides the rubric by default — instructor must click "View Rubric".
     const rubricFull = document.querySelector('#rubric_full');
     const isHidden = !rubricFull ||
       rubricFull.style.display === 'none' ||
@@ -604,7 +603,6 @@
       window.getComputedStyle(rubricFull).display === 'none';
 
     if (isHidden) {
-      // Canvas SpeedGrader uses .toggle_full_rubric for the "View Rubric" button
       const toggle = document.querySelector(
         '.toggle_full_rubric, button.assess_submission_link, ' +
         '#rubric_assessments_list_and_edit_button_holder .edit, ' +
@@ -621,8 +619,6 @@
     }
 
     // ── Step 2: find the rubric container ──────────────────────────────
-    // Classic: #rubric_full .rubric_container.assessing  (.assessing = assessment mode)
-    // Enhanced: [data-testid="enhanced-rubric-assessment-container"]
     const container = document.querySelector(
       '#rubric_full .rubric_container.assessing, ' +
       '#rubric_full .rubric_container, ' +
@@ -630,67 +626,154 @@
       '[data-testid="enhanced-rubric-assessment-container"]'
     );
     if (!container) { console.warn('Katana: rubric container not found'); return; }
-    console.log('Katana: fillRubric — container found:', container.tagName, container.className?.substring(0, 80));
 
-    // Log all criterion-like elements in the container for debugging
-    const allCriteria = container.querySelectorAll('tr[id^="criterion_"], .criterion, [data-criterion-id]');
-    console.log('Katana: fillRubric — criterion elements in DOM:', allCriteria.length,
-      Array.from(allCriteria).map(el => el.id || el.dataset?.criterionId || el.className).join(', '));
+    // ── Step 3: detect rubric type and find criterion elements ─────────
+    // STRATEGY 1: Classic rubric — tr[id^="criterion_"]
+    let criterionEls = Array.from(container.querySelectorAll('tr[id^="criterion_"]'));
+    let matchMode = 'id';
 
-    // ── Step 3: fill each criterion ────────────────────────────────────
-    for (const { criterion_id, points, comments } of rubricRatings) {
-      // Canvas uses id="criterion_{id}" on <tr> elements (classic rubric).
-      // Also try data-criterion-id for enhanced rubric.
-      const criterionEl = container.querySelector(
-        `#criterion_${criterion_id}, ` +
-        `tr#criterion_${criterion_id}, ` +
-        `.criterion[data-criterion-id="${criterion_id}"], ` +
-        `tr[data-criterion-id="${criterion_id}"]`
-      );
+    // STRATEGY 2: Enhanced rubric — [data-testid="rubric-criterion"]
+    if (!criterionEls.length) {
+      criterionEls = Array.from(container.querySelectorAll('[data-testid="rubric-criterion"]'));
+      matchMode = 'index';
+    }
+
+    // STRATEGY 3: Enhanced traditional view — table rows with buttons
+    if (!criterionEls.length) {
+      const table = container.querySelector('table');
+      if (table) {
+        criterionEls = Array.from(table.querySelectorAll('tbody > tr, tr')).filter(tr =>
+          tr.querySelectorAll('button, [role="button"], div.rating-tier').length > 1
+        );
+        matchMode = 'index';
+      }
+    }
+
+    // STRATEGY 4: Enhanced non-table — find all buttons, group by parent section
+    if (!criterionEls.length) {
+      // Look for repeated parent divs that contain rating buttons
+      const allButtons = container.querySelectorAll('button');
+      const parentSections = new Set();
+      allButtons.forEach(btn => {
+        // Go up 3 levels to find the criterion-level parent
+        let parent = btn.parentElement?.parentElement?.parentElement;
+        if (parent && parent !== container) parentSections.add(parent);
+      });
+      if (parentSections.size >= rubricRatings.length) {
+        criterionEls = Array.from(parentSections);
+        matchMode = 'index';
+      }
+    }
+
+    console.log(`Katana: fillRubric — found ${criterionEls.length} criteria (mode=${matchMode})`);
+
+    // FALLBACK: dump DOM structure for debugging
+    if (!criterionEls.length) {
+      const testIds = [...new Set(Array.from(container.querySelectorAll('[data-testid]'))
+        .map(el => el.getAttribute('data-testid')))];
+      const allBtns = container.querySelectorAll('button');
+      console.warn('Katana: fillRubric — no criteria found.',
+        'data-testid values:', testIds.join(', '),
+        '| buttons:', allBtns.length,
+        '| container tag/class:', container.tagName, container.className?.substring(0, 100));
+      // Dump first 2000 chars of HTML for debugging
+      console.warn('Katana: container HTML:', container.innerHTML.substring(0, 2000));
+      return;
+    }
+
+    // ── Step 4: fill each criterion ────────────────────────────────────
+    for (let i = 0; i < rubricRatings.length; i++) {
+      const { criterion_id, points, comments } = rubricRatings[i];
+
+      // Find the criterion element
+      let criterionEl;
+      if (matchMode === 'id') {
+        criterionEl = container.querySelector(
+          `#criterion_${criterion_id}, tr#criterion_${criterion_id}`
+        );
+      } else {
+        // Index-based matching — criteria should be in the same order
+        criterionEl = criterionEls[i];
+      }
+
       if (!criterionEl) {
-        console.warn(`Katana: criterion "${criterion_id}" not found — tried #criterion_${criterion_id}`);
+        console.warn(`Katana: criterion ${i} (${criterion_id}) not found`);
         continue;
       }
-      console.log(`Katana: fillRubric — found criterion ${criterion_id}, tag=${criterionEl.tagName}, id=${criterionEl.id}`);
+      console.log(`Katana: fillRubric — criterion ${i} (${criterion_id}): ${criterionEl.tagName}.${criterionEl.className?.substring(0, 40) || criterionEl.id}`);
 
-      // Classic rubric: div.rating-tier inside each <td>
-      // Enhanced: [data-testid^="rubric-rating-button-"]
+      // Find ALL rating-like elements within this criterion
       const ratingEls = criterionEl.querySelectorAll(
-        'div.rating-tier, .rating-tier, .rating, td.rating, ' +
-        '[data-testid^="rubric-rating-button-"], button[data-points]'
+        'div.rating-tier, .rating-tier, td.rating, .rating, ' +
+        '[data-testid^="rubric-rating-button-"], button[data-points], ' +
+        'button[role="radio"], button[class*="rating"]'
       );
-      console.log(`Katana: fillRubric — ${ratingEls.length} rating elements found for criterion ${criterion_id}`);
 
-      // Pick the rating closest to the target points
+      // Also try: any button inside the criterion
+      const fallbackButtons = ratingEls.length ? [] : Array.from(criterionEl.querySelectorAll('button'));
+      const candidates = ratingEls.length ? Array.from(ratingEls) : fallbackButtons;
+      console.log(`Katana: fillRubric — ${candidates.length} rating candidates for criterion ${criterion_id}`);
+
+      // Extract point values from each candidate
       let bestMatch = null;
       let bestDiff = Infinity;
-      ratingEls.forEach(el => {
+      candidates.forEach((el, idx) => {
+        // Try multiple ways to find the point value:
+        // 1. .rating-points child (classic)
         const ptsEl = el.querySelector('.rating-points, .points, [class*="points"]');
-        const rawPts = ptsEl?.textContent?.trim().replace(/[^0-9.-]/g, '') ||
-                       el.dataset.points || '';
+        let rawPts = ptsEl?.textContent?.trim().replace(/[^0-9.-]/g, '');
+        // 2. data-points attribute
+        if (!rawPts) rawPts = el.dataset?.points;
+        // 3. Text content of the element itself (enhanced rubric buttons show the point value)
+        if (!rawPts) {
+          const text = el.textContent?.trim() || '';
+          const numMatch = text.match(/^(\d+(?:\.\d+)?)$/);
+          if (numMatch) rawPts = numMatch[1];
+        }
+        // 4. aria-label or title containing a number
+        if (!rawPts) {
+          const label = el.getAttribute('aria-label') || el.getAttribute('title') || '';
+          const labelMatch = label.match(/(\d+(?:\.\d+)?)\s*(?:pts?|points?)/i);
+          if (labelMatch) rawPts = labelMatch[1];
+        }
+        // 5. Nearby sibling text with point value (enhanced rubric)
+        if (!rawPts) {
+          const parent = el.parentElement;
+          if (parent) {
+            const sibText = parent.textContent?.trim() || '';
+            const sibMatch = sibText.match(/(\d+(?:\.\d+)?)\s*(?:pts?|points?)/i);
+            if (sibMatch) rawPts = sibMatch[1];
+          }
+        }
+
         const numPts = parseFloat(rawPts);
-        if (isNaN(numPts)) return;
-        const diff = Math.abs(numPts - points);
-        if (diff < bestDiff) { bestDiff = diff; bestMatch = el; }
+        if (!isNaN(numPts)) {
+          const diff = Math.abs(numPts - points);
+          if (diff < bestDiff) { bestDiff = diff; bestMatch = el; }
+        }
       });
 
       if (bestMatch) {
-        console.log(`Katana: fillRubric — clicking rating for criterion ${criterion_id} (target=${points}pts, matched=${bestDiff === 0 ? 'exact' : `diff=${bestDiff}`})`);
-        // Canvas React rubric responds to Event('click') with bubbles: true
+        console.log(`Katana: fillRubric — clicking rating for criterion ${criterion_id} (target=${points}pts, diff=${bestDiff})`);
         bestMatch.dispatchEvent(new Event('click', { bubbles: true }));
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 150));
       } else {
-        console.warn(`Katana: no rating match for criterion ${criterion_id} (${points} pts)`);
+        // Log what we found for debugging
+        const btnTexts = candidates.slice(0, 6).map(el => `"${el.textContent?.trim().substring(0, 30)}"`);
+        console.warn(`Katana: no rating match for criterion ${criterion_id} (${points}pts). Button texts: ${btnTexts.join(', ')}`);
       }
 
-      // Comments: enhanced rubric has inline textareas; classic uses a dialog
+      // Comments
       if (comments) {
         const commentArea = criterionEl.querySelector(
           `[data-testid="comment-text-area-${criterion_id}"], ` +
           `[data-testid="free-form-comment-area-${criterion_id}"], ` +
-          'textarea.criterion_comments, .custom_rating_comments textarea'
+          'textarea, [contenteditable="true"]'
         );
-        if (commentArea) setReactTextareaValue(commentArea, comments);
+        if (commentArea) {
+          if (commentArea.tagName === 'TEXTAREA') setReactTextareaValue(commentArea, comments);
+          else { commentArea.textContent = comments; commentArea.dispatchEvent(new Event('input', { bubbles: true })); }
+        }
       }
     }
   }
