@@ -27,7 +27,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
   if (message.type !== 'AUTH_TOKEN_RECEIVED') return;
 
   // Verify the message came from our web app
-  const allowedOrigins = ['https://www.gradewithkatana.com', 'https://katana-woad.vercel.app'];
+  const allowedOrigins = ['https://www.gradewithkatana.com', 'https://katana-woad.vercel.app', 'http://localhost:3000', 'http://localhost:3001'];
   if (!allowedOrigins.includes(sender.origin)) {
     sendResponse({ ok: false, error: 'Unauthorized origin.' });
     return;

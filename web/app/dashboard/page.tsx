@@ -9,6 +9,7 @@ import styles from './dashboard.module.css';
 import { getStripe } from '../../lib/stripe';
 import type Stripe from 'stripe';
 import GaEvents from '../components/GaEvents';
+import ExtensionNotifier from '../components/ExtensionNotifier';
 
 interface SubscriptionStatus {
   cancelAtPeriodEnd: boolean;
@@ -276,6 +277,9 @@ export default async function DashboardPage({
         <Suspense fallback={null}>
           <GaEvents />
         </Suspense>
+
+        {/* Sync auth token to Chrome extension on every authenticated dashboard load */}
+        <ExtensionNotifier plan={plan} />
       </main>
     </div>
   );

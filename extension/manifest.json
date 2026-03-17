@@ -20,7 +20,11 @@
   ],
 
   "externally_connectable": {
-    "matches": ["https://www.gradewithkatana.com/*", "https://katana-woad.vercel.app/*"]
+    "matches": [
+      "https://www.gradewithkatana.com/*",
+      "https://katana-woad.vercel.app/*",
+      "http://localhost/*"
+    ]
   },
 
   "background": {

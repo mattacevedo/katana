@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '../../../lib/supabase/client';
 import Link from 'next/link';
@@ -21,6 +21,7 @@ function SignInContent() {
   const urlError = searchParams.get('error');
   const plan     = searchParams.get('plan') || '';
   const next     = searchParams.get('next') || '';   // e.g. /admin
+  const source   = searchParams.get('source') || ''; // 'extension' when opened from Chrome extension
   const urlErrorMessage = urlError
     ? (URL_ERROR_MESSAGES[urlError] || 'Something went wrong. Please try again.')
     : '';
@@ -32,12 +33,24 @@ function SignInContent() {
 
   const supabase = createClient();
 
+  // When opened from the Chrome extension, drop a short-lived cookie so the
+  // server-side callback route knows to redirect to /auth/extension-callback
+  // instead of /dashboard.  We do NOT pass this via emailRedirectTo because
+  // extra query params can break Supabase's redirect URL allowlist matching.
+  useEffect(() => {
+    if (source === 'extension') {
+      document.cookie = 'kt_from=extension; path=/; max-age=600; SameSite=Lax';
+    }
+  }, [source]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    // Pass ?next= through so the callback page knows where to redirect after auth
+    // Pass ?next= through so the callback page knows where to redirect after auth.
+    // IMPORTANT: keep the emailRedirectTo clean (no extra params beyond ?next=)
+    // to avoid breaking Supabase's redirect URL allowlist matching.
     const callbackUrl = next
       ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
       : `${window.location.origin}/auth/callback`;
