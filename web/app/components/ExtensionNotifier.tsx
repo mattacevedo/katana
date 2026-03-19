@@ -16,25 +16,38 @@ const EXTENSION_ID = process.env.NEXT_PUBLIC_EXTENSION_ID || '';
 
 export default function ExtensionNotifier({ plan }: { plan: string }) {
   useEffect(() => {
-    if (!EXTENSION_ID) return;
+    if (!EXTENSION_ID) {
+      console.log('[ExtensionNotifier] EXTENSION_ID is empty — skipping');
+      return;
+    }
 
     async function notify() {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        console.log('[ExtensionNotifier] No session from getSession() — skipping');
+        return;
+      }
 
+      console.log('[ExtensionNotifier] Sending AUTH_TOKEN_RECEIVED to', EXTENSION_ID);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cr = (window as any).chrome?.runtime;
         if (cr?.sendMessage) {
-          await cr.sendMessage(EXTENSION_ID, {
+          const resp = await cr.sendMessage(EXTENSION_ID, {
             type: 'AUTH_TOKEN_RECEIVED',
             token: session.access_token,
             email: session.user.email,
             plan,
           });
+          console.log('[ExtensionNotifier] Extension responded:', JSON.stringify(resp));
+        } else {
+          console.log('[ExtensionNotifier] chrome.runtime.sendMessage not available');
         }
-      } catch { /* extension not installed or not reachable */ }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[ExtensionNotifier] sendMessage failed:', msg);
+      }
     }
 
     notify();

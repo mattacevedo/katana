@@ -24,20 +24,25 @@ chrome.action.onClicked.addListener(tab => {
 // chrome.runtime.sendMessage(extensionId, ...) from a web page fires onMessageExternal,
 // NOT onMessage — so we need a separate listener here.
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  console.log('Katana: onMessageExternal received:', message.type, 'from:', sender.origin);
+
   if (message.type !== 'AUTH_TOKEN_RECEIVED') return;
 
   // Verify the message came from our web app
   const allowedOrigins = ['https://www.gradewithkatana.com', 'https://katana-woad.vercel.app', 'http://localhost:3000', 'http://localhost:3001'];
   if (!allowedOrigins.includes(sender.origin)) {
+    console.warn('Katana: Rejected auth message from unauthorized origin:', sender.origin);
     sendResponse({ ok: false, error: 'Unauthorized origin.' });
     return;
   }
 
+  console.log('Katana: Storing auth token for', message.email, '| plan:', message.plan);
   chrome.storage.local.set({
     authToken: message.token,
     userEmail: message.email,
     plan: message.plan
   }, () => {
+    console.log('Katana: Auth token stored successfully');
     sendResponse({ ok: true });
   });
 

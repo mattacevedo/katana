@@ -1,9 +1,12 @@
 // app/auth/extension-callback/page.tsx
 //
 // After a successful PKCE sign-in where the destination is the Chrome extension,
-// the server callback redirects here. This client page reads the session that
-// was just written into the browser cookies, sends the access token to the
-// extension via chrome.runtime.sendMessage, then shows a confirmation.
+// the server callback redirects here with the access token in the URL hash:
+//   /auth/extension-callback#access_token=…&email=…
+//
+// The page reads the token from the hash (primary) or falls back to
+// getSession() (secondary), fetches the user's plan, then sends the
+// token to the Chrome extension via chrome.runtime.sendMessage.
 
 'use client';
 
@@ -18,42 +21,96 @@ export default function ExtensionCallbackPage() {
 
   useEffect(() => {
     async function run() {
+      console.log('[extension-callback] Starting. EXTENSION_ID:', EXTENSION_ID || '(empty)');
+
+      // ── 1. Read access token ──────────────────────────────────────────────
+      // Primary: read from URL hash fragment (passed by the server callback).
+      // This is the most reliable path — no dependency on cookie propagation.
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      let token = hashParams.get('access_token') || '';
+      let email = hashParams.get('email') || '';
+      let userId = '';
+
+      // Clean the hash from the URL so the token doesn't linger in browser history
+      if (token) {
+        console.log('[extension-callback] Got token from URL hash, email:', email);
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+      // Fallback: read from cookies via getSession() if hash was empty
       const supabase = createClient();
+      if (!token) {
+        console.log('[extension-callback] No token in hash, falling back to getSession()');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error('[extension-callback] getSession error:', sessionError.message);
+        }
+        if (session) {
+          token = session.access_token;
+          email = session.user?.email || email;
+          userId = session.user?.id || '';
+          console.log('[extension-callback] Got token from getSession, email:', email);
+        }
+      }
 
-      // Session was established server-side — getSession reads from cookies
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError || !session) {
+      if (!token) {
+        console.error('[extension-callback] No token from hash or getSession — auth failed');
         setErrorMsg('Could not read your session. Please try signing in again.');
         setStatus('error');
         return;
       }
 
-      // Fetch plan for the extension
+      // ── 2. Fetch plan ─────────────────────────────────────────────────────
       let plan = 'free';
       try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('plan')
-          .eq('id', session.user.id)
-          .single();
-        if (data?.plan) plan = data.plan;
+        // If we don't have userId from getSession, get it from the token's session
+        if (!userId) {
+          const { data: { session } } = await supabase.auth.getSession();
+          userId = session?.user?.id || '';
+        }
+        if (userId) {
+          const { data } = await supabase
+            .from('profiles')
+            .select('plan')
+            .eq('id', userId)
+            .single();
+          if (data?.plan) plan = data.plan;
+        }
       } catch { /* default to free */ }
 
-      // Send token to extension (best-effort)
-      if (EXTENSION_ID) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const cr = (window as any).chrome?.runtime;
-          if (cr?.sendMessage) {
-            await cr.sendMessage(EXTENSION_ID, {
-              type: 'AUTH_TOKEN_RECEIVED',
-              token: session.access_token,
-              email: session.user.email,
-              plan,
-            });
-          }
-        } catch { /* extension not installed or not active — that's OK */ }
+      console.log('[extension-callback] Plan:', plan);
+
+      // ── 3. Send token to Chrome extension ─────────────────────────────────
+      if (!EXTENSION_ID) {
+        console.error('[extension-callback] EXTENSION_ID is empty — cannot notify extension. Check NEXT_PUBLIC_EXTENSION_ID env var.');
+        // Still show success since the user IS signed in (web-side)
+        setStatus('success');
+        setTimeout(() => window.close(), 2500);
+        return;
+      }
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cr = (window as any).chrome?.runtime;
+        if (!cr?.sendMessage) {
+          console.warn('[extension-callback] chrome.runtime.sendMessage not available (not Chrome?)');
+        } else {
+          console.log('[extension-callback] Sending AUTH_TOKEN_RECEIVED to extension:', EXTENSION_ID);
+          const resp = await cr.sendMessage(EXTENSION_ID, {
+            type: 'AUTH_TOKEN_RECEIVED',
+            token,
+            email,
+            plan,
+          });
+          console.log('[extension-callback] Extension responded:', JSON.stringify(resp));
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[extension-callback] sendMessage failed:', msg);
+        // Common causes:
+        //   - Extension not installed or disabled
+        //   - Extension ID mismatch
+        //   - Page URL not in externally_connectable.matches
       }
 
       setStatus('success');
