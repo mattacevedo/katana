@@ -119,12 +119,23 @@ async function handleGradeSubmission(message, sendResponse) {
     );
 
     // 5. Strip docViewerUrl before sending to backend; fetch page count if annotating
-    const { docViewerUrl: _docViewerUrl, ...submissionForApi } = submissionData;
-    console.log('Katana: settings.inlineComments =', settings.inlineComments);
+    const { docViewerUrl, ...submissionForApi } = submissionData;
+    console.log('Katana: settings.inlineComments =', settings.inlineComments, '| docViewerUrl:', docViewerUrl ? 'present' : 'absent');
     if (settings.inlineComments) {
-      const pageCount = await getPageCountFromCanvadocs(tab.id).catch(() => null);
+      // If content script detected a DocViewer iframe, flag it for the backend
+      // so annotations are generated even if pageCount/fileAttachments fail
+      if (docViewerUrl) {
+        submissionForApi.hasDocViewer = true;
+      }
+      const pageCount = await getPageCountFromCanvadocs(tab.id).catch((e) => {
+        console.warn('Katana: getPageCountFromCanvadocs error:', e?.message);
+        return null;
+      });
       console.log('Katana: canvadocs pageCount =', pageCount);
-      if (pageCount) submissionForApi.pageCount = pageCount;
+      if (pageCount) {
+        submissionForApi.pageCount = pageCount;
+        submissionForApi.hasDocViewer = true;
+      }
     }
 
     // 6. POST to Katana backend — it calls Claude and returns the result
@@ -386,7 +397,14 @@ async function postCanvadocsAnnotations(jwtInfo, inlineComments, tabId) {
 async function getCanvadocsFrameId(tabId) {
   try {
     const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    const urls = frames?.map(f => f.url?.substring(0, 120)) || [];
+    console.log('Katana: getAllFrames:', frames?.length, 'frames —', JSON.stringify(urls));
     const frame  = frames?.find(f => f.url?.includes('canvadocs.instructure.com'));
+    if (frame) {
+      console.log('Katana: found canvadocs frame — frameId:', frame.frameId, 'url:', frame.url?.substring(0, 100));
+    } else {
+      console.warn('Katana: no canvadocs.instructure.com frame found among', frames?.length, 'frames');
+    }
     return frame?.frameId ?? null;
   } catch (e) {
     console.warn('Katana: could not get canvadocs frame ID', e.message);

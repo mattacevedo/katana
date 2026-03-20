@@ -222,8 +222,7 @@ export default async function DashboardPage({
           <div className={styles.card}>
             <div className={styles.cardLabel}>Chrome Extension</div>
             <div className={styles.cardValue} style={{ fontSize: 14, marginTop: 4 }}>
-              The Katana Chrome extension is coming soon to the Chrome Web Store.
-              You&apos;ll receive an email when it&apos;s available.
+              Install the Katana Chrome extension to grade submissions directly in SpeedGrader.
             </div>
           </div>
         </div>

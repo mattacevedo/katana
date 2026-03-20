@@ -179,14 +179,22 @@
   }
 
   // Returns the Canvas canvadoc_session URL from the DocViewer iframe src.
-  // The service worker fetches this (with credentials) to follow the redirect
-  // and extract the Canvadocs JWT from the final URL.
+  // The service worker uses the presence of this URL to flag hasDocViewer=true
+  // so the backend generates inline annotations even if pageCount fails.
   function getDocViewerUrl() {
+    // 1. Standard Canvas DocViewer iframe
     const iframe = document.getElementById('submission-preview-iframe');
-    if (!iframe) return null;
-    const src = iframe.src || iframe.getAttribute('src') || '';
-    if (!src || !src.includes('canvadoc_session')) return null;
-    return src;
+    if (iframe) {
+      const src = iframe.src || iframe.getAttribute('src') || '';
+      if (src.includes('canvadoc_session') || src.includes('canvadocs')) return src;
+    }
+    // 2. Fallback: any iframe pointing to canvadocs (e.g. nested frames)
+    const allIframes = document.querySelectorAll('iframe[src*="canvadoc"]');
+    for (const f of allIframes) {
+      const src = f.src || '';
+      if (src) return src;
+    }
+    return null;
   }
 
   async function fetchSubmissionFromAPI() {

@@ -331,6 +331,7 @@ function showSettingsStatus(msg, isError) {
   el.textContent = msg;
   el.classList.remove('hidden', 'error');
   if (isError) el.classList.add('error');
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   setTimeout(() => el.classList.add('hidden'), 3000);
 }
 

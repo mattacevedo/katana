@@ -319,9 +319,10 @@ function buildPrompts(data: SubmissionData, settings: GradingSettings) {
   }
 
   // Enable annotations for any submission rendered in DocViewer (PDF attachment OR
-  // Word/file submission showing in Canvadocs — confirmed by pageCount being returned).
+  // Word/file submission showing in Canvadocs — confirmed by pageCount, fileAttachments,
+  // or the hasDocViewer flag sent by the service worker when a DocViewer iframe is detected).
   const hasAttachments = (data.submission?.fileAttachments?.length ?? 0) > 0;
-  const hasDocViewer   = hasAttachments || (data.pageCount != null && data.pageCount > 0);
+  const hasDocViewer   = hasAttachments || data.hasDocViewer === true || (data.pageCount != null && data.pageCount > 0);
 
     const annotationsPerPage = settings.annotationsPerPage ?? 1;
     const annotationTarget   = data.pageCount
