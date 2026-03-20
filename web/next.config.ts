@@ -40,6 +40,23 @@ const nextConfig: NextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=(), payment=()',
           },
+          // Content-Security-Policy — restrict resource loading.
+          // 'unsafe-inline' on scripts is required for Next.js hydration;
+          // consider adding nonce support later for stricter XSS protection.
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https:",
+              `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com`,
+              "font-src 'self'",
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self' https://accounts.google.com https://checkout.stripe.com",
+            ].join('; '),
+          },
         ],
       },
     ];
