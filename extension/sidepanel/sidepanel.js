@@ -23,6 +23,7 @@ let currentTabId = null;
 let fullFeedbackText = '';
 let feedbackExpanded = false;
 let isSignedIn = false;
+let currentState = 'signed-out'; // Track current state to avoid clobbering results
 
 // ─── Tab navigation ───────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -42,6 +43,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 const STATES = ['signed-out', 'idle', 'wrong-page', 'loading', 'results', 'error'];
 
 function setState(name) {
+  currentState = name;
   STATES.forEach(s => {
     const el = document.getElementById(`state-${s}`);
     if (el) el.classList.toggle('hidden', s !== name);
@@ -121,7 +123,11 @@ async function checkCurrentPage() {
       if (info?.ok) document.getElementById('student-name').textContent = info.studentName || 'Loading…';
     } catch (_) {}
 
-    setState('idle');
+    // Don't clobber results/loading state — only transition to idle if we're not
+    // already showing grading results or actively grading.
+    if (currentState !== 'results' && currentState !== 'loading') {
+      setState('idle');
+    }
   } catch (err) {
     console.warn('Katana: page check failed', err.message);
     setState('wrong-page');
@@ -338,6 +344,9 @@ function showSettingsStatus(msg, isError) {
 // ─── Incoming messages from background ────────────────────────────────────
 chrome.runtime.onMessage.addListener(message => {
   if (message.type === 'STUDENT_CHANGED') {
+    // Force back to idle when navigating to a different student
+    // (overrides the results/loading guard in checkCurrentPage)
+    setState('idle');
     const gradeTab = document.getElementById('tab-grade');
     if (!gradeTab.classList.contains('hidden')) checkCurrentPage();
   }

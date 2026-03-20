@@ -304,6 +304,9 @@
     return { gradingType: type, maxPoints: maxPts };
   }
 
+  // Cache full student names by ID — DOM-only fallback may return first name only
+  const _studentNameCache = {};
+
   function getStudentName() {
     // 1. Get student_id from URL (always present in SpeedGrader URLs)
     const studentId = new URL(location.href).searchParams.get('student_id');
@@ -314,19 +317,22 @@
       if (jd && studentId) {
         // studentsWithSubmissions is the primary SpeedGrader data array
         const swsMatch = jd.studentsWithSubmissions?.find(s => String(s.id) === studentId);
-        if (swsMatch?.name) return swsMatch.name;
+        if (swsMatch?.name) { _studentNameCache[studentId] = swsMatch.name; return swsMatch.name; }
         // context.students is the secondary array
         const ctxMatch = jd.context?.students?.find(s => String(s.id) === studentId);
-        if (ctxMatch?.name) return ctxMatch.name;
+        if (ctxMatch?.name) { _studentNameCache[studentId] = ctxMatch.name; return ctxMatch.name; }
       }
-      if (jd?.studentInformation?.name) return jd.studentInformation.name;
+      if (jd?.studentInformation?.name) { if (studentId) _studentNameCache[studentId] = jd.studentInformation.name; return jd.studentInformation.name; }
     } catch (_) {}
 
     // 3. Try ENV fields
     const envName = window.ENV?.student_name || window.ENV?.SUBMISSION_DETAILS?.student_name || window.ENV?.RUBRIC_ASSESSMENT?.student?.name;
-    if (envName) return envName;
+    if (envName) { if (studentId) _studentNameCache[studentId] = envName; return envName; }
 
-    // 4. Fall back to DOM selectors (may only have first name in some Canvas builds)
+    // 4. Return cached full name if available (prevents falling back to first-name-only DOM selectors)
+    if (studentId && _studentNameCache[studentId]) return _studentNameCache[studentId];
+
+    // 5. Fall back to DOM selectors (may only have first name in some Canvas builds)
     const selectors = ['[data-testid="selected-student"]','[data-testid="student-name"]','[data-testid="students_selectmenu"] [class*="label"]','#students_selectmenu .ui-selectmenu-text span','#students_selectmenu .ui-selectmenu-text','#students_selectmenu-button .ui-selectmenu-item-header','#student_name','.student_name','#student-name'];
     for (const sel of selectors) {
       try { const el = document.querySelector(sel); const text = el?.textContent?.trim(); if (text && text !== 'Student' && text.length > 1) return text; } catch (_) {}
@@ -626,6 +632,30 @@
       }
     }
 
+    // ── Step 1b: ensure rubric is in assessing mode ─────────────────────
+    // After a previous grade, Canvas may show the rubric in read-only mode.
+    // We need to re-enter "assessing" mode so rating clicks are processed.
+    const existingContainer = document.querySelector(
+      '#rubric_full .rubric_container, .rubric_container'
+    );
+    if (existingContainer && !existingContainer.classList.contains('assessing')) {
+      console.log('Katana: fillRubric — rubric not in assessing mode, clicking edit button');
+      const assessBtn = document.querySelector(
+        '#rubric_assessments_list_and_edit_button_holder .edit, ' +
+        'button.assess_submission_link, ' +
+        '.toggle_full_rubric, ' +
+        'a.toggle_rubric_assessments, ' +
+        '#rubric_assessments_list_and_edit_button_holder button'
+      );
+      if (assessBtn) {
+        assessBtn.click();
+        await waitForEl('.rubric_container.assessing', 3000);
+        await new Promise(r => setTimeout(r, 300)); // Let Canvas finish rendering
+      } else {
+        console.warn('Katana: fillRubric — no assess/edit button found to enter assessing mode');
+      }
+    }
+
     // ── Step 2: find the rubric container ──────────────────────────────
     const container = document.querySelector(
       '#rubric_full .rubric_container.assessing, ' +
@@ -762,9 +792,21 @@
       });
 
       if (bestMatch) {
-        console.log(`Katana: fillRubric — clicking rating for criterion ${criterion_id} (target=${points}pts, diff=${bestDiff})`);
-        bestMatch.dispatchEvent(new Event('click', { bubbles: true }));
-        await new Promise(r => setTimeout(r, 150));
+        // Check if this rating is already selected (avoid toggling it off on regrade)
+        const isAlreadySelected =
+          bestMatch.classList.contains('selected') ||
+          bestMatch.getAttribute('aria-selected') === 'true' ||
+          bestMatch.classList.contains('rating-tier--selected') ||
+          bestMatch.closest('.selected') != null ||
+          bestMatch.getAttribute('aria-checked') === 'true';
+
+        if (isAlreadySelected && bestDiff < 0.01) {
+          console.log(`Katana: fillRubric — rating already selected for criterion ${criterion_id} (${points}pts), skipping click`);
+        } else {
+          console.log(`Katana: fillRubric — clicking rating for criterion ${criterion_id} (target=${points}pts, diff=${bestDiff}, wasSelected=${isAlreadySelected})`);
+          bestMatch.dispatchEvent(new Event('click', { bubbles: true }));
+          await new Promise(r => setTimeout(r, 150));
+        }
       } else {
         // Log what we found for debugging
         const btnTexts = candidates.slice(0, 6).map(el => `"${el.textContent?.trim().substring(0, 30)}"`);
