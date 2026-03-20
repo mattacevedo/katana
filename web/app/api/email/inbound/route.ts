@@ -9,7 +9,8 @@
 //   skip           → automated notifications, system emails; no action taken
 //
 // Setup:
-//   • Postmark webhook URL: https://www.gradewithkatana.com/api/email/inbound?secret=POSTMARK_WEBHOOK_SECRET
+//   • Postmark webhook URL: https://katana:POSTMARK_WEBHOOK_SECRET@www.gradewithkatana.com/api/email/inbound
+//     (HTTP Basic Auth — Postmark sends credentials in the Authorization header, not the URL)
 //   • GOOGLE_REFRESH_TOKEN must be set after running /api/email/oauth
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -565,9 +566,29 @@ async function sendEscalationNotification(params: {
 // ── Main handler ───────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // 1. Verify webhook secret
-  const secret = req.nextUrl.searchParams.get('secret');
-  if (!secret || secret !== process.env.POSTMARK_WEBHOOK_SECRET) {
+  // 1. Verify webhook secret — prefer Authorization header (HTTP Basic Auth),
+  //    fall back to query param for backward compatibility during migration.
+  //    Postmark sends Basic Auth when the webhook URL uses https://user:pass@host format.
+  const expectedSecret = process.env.POSTMARK_WEBHOOK_SECRET;
+  let authenticated = false;
+
+  // Check Authorization: Basic header first (credentials stay out of URL/logs)
+  const authHeader = req.headers.get('authorization') || '';
+  if (authHeader.startsWith('Basic ')) {
+    try {
+      const decoded = atob(authHeader.slice(6));
+      const password = decoded.includes(':') ? decoded.split(':').slice(1).join(':') : decoded;
+      if (expectedSecret && password === expectedSecret) authenticated = true;
+    } catch { /* malformed base64 — fall through */ }
+  }
+
+  // Fallback: query param (deprecated — update Postmark URL to use Basic Auth)
+  if (!authenticated) {
+    const secret = req.nextUrl.searchParams.get('secret');
+    if (secret && secret === expectedSecret) authenticated = true;
+  }
+
+  if (!authenticated) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   }
 
