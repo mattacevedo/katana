@@ -17,8 +17,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminClient } from '../../../../lib/supabase/admin';
 import { logActivity } from '../../../../lib/logActivity';
+import { Redis } from '@upstash/redis';
+import { Ratelimit } from '@upstash/ratelimit';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// ─── Rate limiter (Upstash Redis) ─────────────────────────────────────────
+// 30 inbound emails per minute — generous for legitimate Postmark traffic
+// but stops replay/flood attacks from burning Claude credits.
+const ratelimit = (
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+)
+  ? new Ratelimit({
+      redis: new Redis({
+        url:   process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      }),
+      limiter: Ratelimit.slidingWindow(30, '1 m'),
+      analytics: false,
+      prefix: 'katana:rl:inbound',
+    })
+  : null;
 
 const PLAN_LIMITS: Record<string, number> = {
   free: 50, basic: 200, super: 1000, shogun: 2500,
@@ -590,6 +609,15 @@ export async function POST(req: NextRequest) {
 
   if (!authenticated) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  }
+
+  // 1b. Rate limit — keyed by IP to stop replay/flood attacks
+  if (ratelimit) {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const { success } = await ratelimit.limit(`inbound:${ip}`);
+    if (!success) {
+      return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
+    }
   }
 
   // 2. Parse Postmark payload
