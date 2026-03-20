@@ -10,6 +10,7 @@ import { getStripe } from '../../lib/stripe';
 import type Stripe from 'stripe';
 import GaEvents from '../components/GaEvents';
 import ExtensionNotifier from '../components/ExtensionNotifier';
+import SignOutButton from '../components/SignOutButton';
 
 interface SubscriptionStatus {
   cancelAtPeriodEnd: boolean;
@@ -110,9 +111,7 @@ export default async function DashboardPage({
     <div className={styles.page}>
       <nav className={styles.nav}>
         <Link href="/" className={styles.logo}>⚔️ Katana</Link>
-        <form action="/auth/signout" method="post">
-          <button type="submit" className={styles.btnSignOut}>Sign Out</button>
-        </form>
+        <SignOutButton className={styles.btnSignOut} />
       </nav>
 
       <main className={styles.main}>

@@ -11,6 +11,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 export async function POST(req: NextRequest) {
+  // CSRF protection: only accept requests from our own origin.
+  // The auth callback page is the only legitimate caller.
+  const origin = req.headers.get('origin') || '';
+  const allowedOrigins = ['https://www.gradewithkatana.com'];
+  if (process.env.NODE_ENV === 'development') {
+    allowedOrigins.push('http://localhost:3000', 'http://localhost:3001');
+  }
+  if (!allowedOrigins.includes(origin)) {
+    return NextResponse.json({ error: 'Forbidden.' }, { status: 403 });
+  }
+
   let access_token: string, refresh_token: string;
   try {
     ({ access_token, refresh_token } = await req.json());

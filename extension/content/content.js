@@ -248,10 +248,11 @@
   }
 
   function decodeHtmlDescription(html) {
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    div.querySelectorAll('script, style').forEach(el => el.remove());
-    return div.textContent.replace(/\s+/g, ' ').trim().substring(0, 8000);
+    // Use DOMParser to safely extract text — unlike innerHTML, DOMParser
+    // never executes scripts or fires load events for embedded resources.
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('script, style').forEach(el => el.remove());
+    return doc.body.textContent.replace(/\s+/g, ' ').trim().substring(0, 8000);
   }
 
   function getAssignmentTitleFromDOM() {

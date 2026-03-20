@@ -2,7 +2,7 @@
 // Central coordinator: message routing, Katana API calls, auth token management.
 //
 // KEY DIFFERENCE from prototype: instead of calling Claude directly,
-// we POST to https://katana-woad.vercel.app/api/grade — the backend handles
+// we POST to https://www.gradewithkatana.com/api/grade — the backend handles
 // auth validation, quota enforcement, and the Claude API call.
 
 const KATANA_API_BASE = 'https://www.gradewithkatana.com';
@@ -26,27 +26,34 @@ chrome.action.onClicked.addListener(tab => {
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   console.log('Katana: onMessageExternal received:', message.type, 'from:', sender.origin);
 
-  if (message.type !== 'AUTH_TOKEN_RECEIVED') return;
-
   // Verify the message came from our web app
-  const allowedOrigins = ['https://www.gradewithkatana.com', 'https://katana-woad.vercel.app', 'http://localhost:3000', 'http://localhost:3001'];
+  const allowedOrigins = ['https://www.gradewithkatana.com'];
   if (!allowedOrigins.includes(sender.origin)) {
     console.warn('Katana: Rejected auth message from unauthorized origin:', sender.origin);
     sendResponse({ ok: false, error: 'Unauthorized origin.' });
     return;
   }
 
-  console.log('Katana: Storing auth token for', message.email, '| plan:', message.plan);
-  chrome.storage.local.set({
-    authToken: message.token,
-    userEmail: message.email,
-    plan: message.plan
-  }, () => {
-    console.log('Katana: Auth token stored successfully');
-    sendResponse({ ok: true });
-  });
+  if (message.type === 'AUTH_TOKEN_RECEIVED') {
+    console.log('Katana: Storing auth token for', message.email, '| plan:', message.plan);
+    chrome.storage.local.set({
+      authToken: message.token,
+      userEmail: message.email,
+      plan: message.plan
+    }, () => {
+      console.log('Katana: Auth token stored successfully');
+      sendResponse({ ok: true });
+    });
+    return true; // keep channel open for async sendResponse
+  }
 
-  return true; // keep channel open for async sendResponse
+  if (message.type === 'SIGN_OUT') {
+    console.log('Katana: Clearing auth token (sign-out from web app)');
+    chrome.storage.local.remove(['authToken', 'userEmail', 'plan'], () => {
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
 });
 
 // ─── Main message router ────────────────────────────────────────────────────
