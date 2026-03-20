@@ -33,7 +33,7 @@ const jsonLd = {
 
 // ── Coming-soon gate ───────────────────────────────────────────────────────
 // Set to false to re-enable all sign-up CTAs and go fully live.
-const COMING_SOON = false;
+const COMING_SOON = true;
 // ──────────────────────────────────────────────────────────────────────────
 
 export default async function LandingPage() {
