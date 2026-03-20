@@ -597,20 +597,10 @@ export async function POST(req: NextRequest) {
     try {
       const decoded = atob(authHeader.slice(6));
       const password = decoded.includes(':') ? decoded.split(':').slice(1).join(':') : decoded;
-      // Also try URL-decoded password in case Postmark doesn't decode %XX sequences
+      // Also try URL-decoded password — Postmark may pass %XX sequences as-is
       const passwordDecoded = decodeURIComponent(password);
-      console.log('Katana inbound: Basic auth check —',
-        'decoded:', JSON.stringify(decoded),
-        '| password:', JSON.stringify(password),
-        '| expected:', JSON.stringify(expectedSecret),
-        '| match:', password === expectedSecret,
-        '| decodedMatch:', passwordDecoded === expectedSecret);
       if (expectedSecret && (password === expectedSecret || passwordDecoded === expectedSecret)) authenticated = true;
-    } catch (e) {
-      console.warn('Katana inbound: Basic auth decode error:', e);
-    }
-  } else {
-    console.log('Katana inbound: no Basic auth header. authorization:', JSON.stringify(authHeader));
+    } catch { /* malformed base64 — fall through */ }
   }
 
   // Fallback: query param (deprecated — update Postmark URL to use Basic Auth)
