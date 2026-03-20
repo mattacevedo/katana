@@ -426,6 +426,7 @@ interface SubmissionData {
   dueAt?: string;
   submittedAt?: string;
   pageCount?: number;
+  hasDocViewer?: boolean;
 }
 
 interface GradingSettings {
