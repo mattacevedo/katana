@@ -33,13 +33,14 @@ function SignInContent() {
 
   const supabase = createClient();
 
-  // When opened from the Chrome extension, drop a short-lived cookie so the
-  // server-side callback route knows to redirect to /auth/extension-callback
-  // instead of /dashboard.  We do NOT pass this via emailRedirectTo because
-  // extra query params can break Supabase's redirect URL allowlist matching.
+  // When opened from the Chrome extension, store a flag in localStorage so the
+  // extension-callback page knows to send the token to the Chrome extension
+  // (instead of redirecting to /dashboard for web logins).
+  // localStorage is same-origin and survives cross-site redirect chains —
+  // more reliable than cookies which can be affected by SameSite policies.
   useEffect(() => {
     if (source === 'extension') {
-      document.cookie = 'kt_from=extension; path=/; max-age=600; SameSite=Lax';
+      localStorage.setItem('kt_from', 'extension');
     }
   }, [source]);
 
