@@ -4,13 +4,28 @@
 // Exchanges the auth code for tokens and displays the refresh token so it
 // can be saved to Vercel as GOOGLE_REFRESH_TOKEN.
 //
+// ADMIN-ONLY: requires the logged-in user's email to match ADMIN_EMAIL.
 // This route is only ever visited once (manually by the inbox owner).
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient as createServerClient } from '../../../../../lib/supabase/server';
 
 const REDIRECT_URI = 'https://www.gradewithkatana.com/api/email/oauth/callback';
 
+async function verifyAdmin() {
+  const serverSupabase = await createServerClient();
+  const { data: { user } } = await serverSupabase.auth.getUser();
+  if (!user) return null;
+  const adminEmail = process.env.ADMIN_EMAIL || '';
+  if (!adminEmail || user.email?.toLowerCase() !== adminEmail.toLowerCase()) return null;
+  return user;
+}
+
 export async function GET(req: NextRequest) {
+  if (!await verifyAdmin()) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const code  = req.nextUrl.searchParams.get('code');
   const error = req.nextUrl.searchParams.get('error');
 
@@ -39,7 +54,6 @@ export async function GET(req: NextRequest) {
   if (!tokens.refresh_token) {
     return NextResponse.json({
       error:   'No refresh token returned. Revoke app access in your Google Account settings and try again.',
-      details: tokens,
     }, { status: 400 });
   }
 
