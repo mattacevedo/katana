@@ -12,8 +12,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe, STRIPE_PRICES, planFromPriceId } from '../../../../lib/stripe';
 import { createAdminClient } from '../../../../lib/supabase/admin';
+import { Redis } from '@upstash/redis';
+import { Ratelimit } from '@upstash/ratelimit';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.gradewithkatana.com';
+
+// 10 checkout sessions per user per hour — stops session-creation abuse
+const checkoutRatelimit = (
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+)
+  ? new Ratelimit({
+      redis: new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN }),
+      limiter: Ratelimit.slidingWindow(10, '1 h'),
+      prefix: 'katana:rl:checkout',
+    })
+  : null;
 
 function json(body: object, status = 200) {
   return NextResponse.json(body, { status });
@@ -31,6 +44,12 @@ export async function POST(req: NextRequest) {
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !user) {
     return json({ error: 'Invalid or expired session. Please sign in again.' }, 401);
+  }
+
+  // ── 1b. Rate limit ────────────────────────────────────────────────────────
+  if (checkoutRatelimit) {
+    const { success } = await checkoutRatelimit.limit(user.id);
+    if (!success) return json({ error: 'Too many requests. Please wait before trying again.' }, 429);
   }
 
   // ── 2. Validate requested plan ────────────────────────────────────────────

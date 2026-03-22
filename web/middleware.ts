@@ -54,6 +54,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(signinUrl);
   }
 
+  response.headers.set('X-Content-Type-Options', 'nosniff');
   return response;
 }
 

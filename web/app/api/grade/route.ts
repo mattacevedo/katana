@@ -269,6 +269,19 @@ async function callClaude(
     throw new Error('Claude response missing required fields.');
   }
 
+  // Sanitize rubric_ratings — drop any malformed entries rather than crashing downstream
+  if (!Array.isArray(parsed.rubric_ratings)) {
+    parsed.rubric_ratings = [];
+  } else {
+    parsed.rubric_ratings = parsed.rubric_ratings.filter(
+      (r): r is { criterion_id: string; points: number; comments: string } =>
+        typeof r === 'object' && r !== null &&
+        typeof (r as Record<string, unknown>).criterion_id === 'string' &&
+        typeof (r as Record<string, unknown>).points === 'number' &&
+        typeof (r as Record<string, unknown>).comments === 'string'
+    );
+  }
+
   return parsed;
 }
 

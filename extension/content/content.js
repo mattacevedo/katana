@@ -396,7 +396,7 @@
     const url = att.url;
     if (!url) return { text: `[File: ${name} — no download URL available]`, fileData: null };
     let buffer;
-    try { const r = await fetch(url, { credentials: 'same-origin' }); if (!r.ok) throw new Error(`HTTP ${r.status}`); buffer = await r.arrayBuffer(); }
+    try { const _ac = new AbortController(); const _t = setTimeout(() => _ac.abort(), 30000); let r; try { r = await fetch(url, { credentials: 'same-origin', signal: _ac.signal }); } finally { clearTimeout(_t); } if (!r.ok) throw new Error(`HTTP ${r.status}`); buffer = await r.arrayBuffer(); }
     catch (e) { return { text: `[File: ${name} — download failed: ${e.message}]`, fileData: null }; }
     const isPdf  = /\.pdf$/i.test(name)  || mime.includes('pdf');
     const isDocx = /\.docx$/i.test(name) || mime.includes('wordprocessingml') || mime.includes('officedocument.wordprocessing');
