@@ -113,9 +113,11 @@
         <span id="apply-warning-text"></span>
       </div>
 
-      <div id="result-annotations-row" class="annotations-notice hidden">
-        <span class="annotations-notice-icon">📌</span>
-        <span id="result-annotations-text"></span>
+      <div class="rating-row">
+        <span class="rating-label">Was this helpful?</span>
+        <button id="btn-thumbs-up" class="btn-rating" aria-label="Thumbs up">👍</button>
+        <button id="btn-thumbs-down" class="btn-rating" aria-label="Thumbs down">👎</button>
+        <span id="rating-thanks" class="rating-thanks hidden">Thanks!</span>
       </div>
 
       <div class="action-hint-box">
@@ -137,6 +139,11 @@
       <button id="btn-error-signin" class="btn-secondary hidden">Sign In Again</button>
     </div>
 
+    <!-- Persistent quota indicator — shown when signed in -->
+    <div id="grade-tab-quota" class="grade-tab-quota hidden">
+      <span id="grade-tab-quota-text"></span>
+    </div>
+
   </section>
 
   <!-- ── Settings Tab ───────────────────────────────────────────────── -->
@@ -148,9 +155,11 @@
         <div class="account-info">
           <span class="account-email" id="account-email"></span>
           <span class="account-plan" id="account-plan"></span>
-          <span class="account-quota" id="account-quota"></span>
         </div>
-        <button id="btn-signout" class="btn-signout">Sign Out</button>
+        <div class="account-actions">
+          <a id="btn-dashboard" href="https://www.gradewithkatana.com/dashboard" target="_blank" rel="noopener" class="btn-link">Dashboard</a>
+          <button id="btn-signout" class="btn-signout">Sign Out</button>
+        </div>
       </div>
       <div class="account-card account-card-out" id="account-card-signed-out">
         <p class="account-signed-out-text">Not signed in.</p>
@@ -222,18 +231,6 @@
           placeholder="E.g., 'This is a 200-level writing course. Always comment on thesis clarity and citation quality.'"
         ></textarea>
         <p class="form-hint">Added to every grading request. Describe course level, grading priorities, or specific criteria.</p>
-      </div>
-
-      <div class="form-group">
-        <label class="form-check">
-          <input type="checkbox" id="inline-comments" class="form-checkbox">
-          <span class="form-check-label">Add inline annotations to document</span>
-        </label>
-        <p class="form-hint">Highlights specific passages in DocViewer with AI-generated feedback tied to the text. Only applies to PDF submissions.</p>
-        <div id="annotations-density-controls" class="late-row hidden">
-          <input type="number" id="annotations-per-page" class="form-input form-input-narrow" min="0.25" max="3" step="0.25" value="1">
-          <span class="late-row-label">annotations per page</span>
-        </div>
       </div>
 
       <button id="btn-save-settings" class="btn-primary">Save Settings</button>

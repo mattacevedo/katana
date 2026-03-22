@@ -164,3 +164,20 @@
 .noteBox ul { margin: 0; padding-left: 18px; }
 .noteBox li { margin-bottom: 4px; }
 .noteBox code { background: #e5e7eb; border-radius: 3px; padding: 1px 5px; font-size: 12px; }
+
+/* ── Add Grades form ──────────────────────────────────────────────────── */
+.sectionDesc { font-size: 13px; color: #6b7280; margin: -8px 0 16px; }
+.sectionDesc code { background: #e5e7eb; border-radius: 3px; padding: 1px 5px; font-size: 12px; }
+.addGradesForm  { display: flex; flex-direction: column; gap: 10px; }
+.addGradesRow   { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.addGradesInput { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 13px; }
+.addGradesInputNarrow { width: 100px; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 13px; }
+.addGradesBtn   {
+  background: #2563eb; color: #fff; border: none; border-radius: 7px;
+  padding: 8px 20px; font-size: 13px; font-weight: 700; cursor: pointer;
+  white-space: nowrap; transition: background 0.15s;
+}
+.addGradesBtn:hover:not(:disabled) { background: #1d4ed8; }
+.addGradesBtn:disabled { opacity: 0.6; cursor: default; }
+.addGradesSuccess { font-size: 13px; color: #059669; font-weight: 600; margin: 0; }
+.addGradesError   { font-size: 13px; color: #dc2626; font-weight: 600; margin: 0; }

@@ -24,6 +24,8 @@ let fullFeedbackText = '';
 let feedbackExpanded = false;
 let isSignedIn = false;
 let currentState = 'signed-out'; // Track current state to avoid clobbering results
+let currentGradeSessionId = null; // UUID generated per grading result, used for ratings
+let currentRating = null;         // 'up', 'down', or null
 
 // ─── Tab navigation ───────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -70,14 +72,14 @@ async function loadAuthState() {
   } else {
     cardIn.classList.add('hidden');
     cardOut.classList.remove('hidden');
+    const quotaBar = document.getElementById('grade-tab-quota');
+    if (quotaBar) quotaBar.classList.add('hidden');
   }
 
   return isSignedIn;
 }
 
 async function fetchAndDisplayQuota(authToken) {
-  const quotaEl = document.getElementById('account-quota');
-  if (!quotaEl) return;
   try {
     const resp = await fetch(`${APP_BASE}/api/quota`, {
       headers: { 'Authorization': `Bearer ${authToken}` }
@@ -86,7 +88,10 @@ async function fetchAndDisplayQuota(authToken) {
     const data = await resp.json();
     const { remaining, limit } = data;
     if (typeof remaining === 'number' && typeof limit === 'number') {
-      quotaEl.textContent = `${remaining} of ${limit} grades remaining this period`;
+      const quotaBar = document.getElementById('grade-tab-quota');
+      const quotaText = document.getElementById('grade-tab-quota-text');
+      if (quotaText) quotaText.textContent = `${remaining} of ${limit} grades remaining`;
+      if (quotaBar) quotaBar.classList.remove('hidden');
     }
   } catch (_) {}
 }
@@ -186,6 +191,13 @@ async function triggerGrading() {
 }
 
 function displayResults(result) {
+  // Generate a fresh session ID for this result so the rating is tied to it
+  currentGradeSessionId = crypto.randomUUID();
+  currentRating = null;
+  document.getElementById('btn-thumbs-up').classList.remove('rating-selected-up', 'rating-dimmed');
+  document.getElementById('btn-thumbs-down').classList.remove('rating-selected-down', 'rating-dimmed');
+  document.getElementById('rating-thanks').classList.add('hidden');
+
   document.getElementById('result-grade').textContent = result.grade ?? '—';
   document.getElementById('result-student-name').textContent = result.studentName || '';
 
@@ -230,17 +242,6 @@ function displayResults(result) {
     warning.classList.add('hidden');
   }
 
-  const annotationRow = document.getElementById('result-annotations-row');
-  const annotationText = document.getElementById('result-annotations-text');
-  if (result.inlineAnnotationsPosted > 0) {
-    if (annotationRow && annotationText) {
-      annotationText.textContent = `${result.inlineAnnotationsPosted} inline annotation${result.inlineAnnotationsPosted === 1 ? '' : 's'} added to document`;
-      annotationRow.classList.remove('hidden');
-    }
-  } else if (annotationRow) {
-    annotationRow.classList.add('hidden');
-  }
-
   setState('results');
 }
 
@@ -251,6 +252,43 @@ document.getElementById('btn-expand-feedback').addEventListener('click', () => {
   feedbackEl.textContent = feedbackExpanded ? fullFeedbackText : fullFeedbackText.substring(0, 280) + '…';
   expandBtn.textContent = feedbackExpanded ? 'Show less' : 'Show full feedback';
 });
+
+// ─── Feedback rating ───────────────────────────────────────────────────
+document.getElementById('btn-thumbs-up').addEventListener('click', () => submitRating('up'));
+document.getElementById('btn-thumbs-down').addEventListener('click', () => submitRating('down'));
+
+async function submitRating(rating) {
+  if (!currentGradeSessionId) return;
+
+  // Optimistic UI
+  currentRating = rating;
+  const upBtn   = document.getElementById('btn-thumbs-up');
+  const downBtn = document.getElementById('btn-thumbs-down');
+  upBtn.classList.remove('rating-selected-up', 'rating-dimmed');
+  downBtn.classList.remove('rating-selected-down', 'rating-dimmed');
+  if (rating === 'up') {
+    upBtn.classList.add('rating-selected-up');
+    downBtn.classList.add('rating-dimmed');
+  } else {
+    downBtn.classList.add('rating-selected-down');
+    upBtn.classList.add('rating-dimmed');
+  }
+  document.getElementById('rating-thanks').classList.remove('hidden');
+
+  // Fire and forget — don't block or show error for a rating
+  try {
+    const { authToken } = await chrome.storage.local.get('authToken');
+    if (!authToken) return;
+    await fetch(`${APP_BASE}/api/grade/rate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ gradeSessionId: currentGradeSessionId, rating }),
+    });
+  } catch (_) {}
+}
 
 // ─── Settings ──────────────────────────────────────────────────────────────
 const FEEDBACK_LENGTH_LABELS = ['', 'Short', 'Brief', 'Standard', 'Detailed', 'Comprehensive'];
@@ -271,15 +309,10 @@ document.getElementById('late-deduction').addEventListener('change', e => {
   document.getElementById('late-deduction-controls').classList.toggle('hidden', !e.target.checked);
 });
 
-document.getElementById('inline-comments').addEventListener('change', e => {
-  document.getElementById('annotations-density-controls').classList.toggle('hidden', !e.target.checked);
-});
-
 async function loadSettings() {
   const settings = await chrome.storage.sync.get([
     'tone', 'customInstructions', 'feedbackLength', 'strictness',
-    'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay', 'inlineComments',
-    'annotationsPerPage'
+    'greetByFirstName', 'lateDeduction', 'lateDeductionPerDay'
   ]);
 
   if (settings.tone)  document.getElementById('tone-select').value = settings.tone;
@@ -298,10 +331,6 @@ async function loadSettings() {
   document.getElementById('late-deduction').checked = lateDeduction;
   document.getElementById('late-deduction-controls').classList.toggle('hidden', !lateDeduction);
   document.getElementById('late-deduction-per-day').value = settings.lateDeductionPerDay || 10;
-  const inlineComments = !!settings.inlineComments;
-  document.getElementById('inline-comments').checked = inlineComments;
-  document.getElementById('annotations-density-controls').classList.toggle('hidden', !inlineComments);
-  document.getElementById('annotations-per-page').value = settings.annotationsPerPage ?? 1;
 }
 
 document.getElementById('btn-save-settings').addEventListener('click', async () => {
@@ -312,9 +341,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     strictness: parseInt(document.getElementById('strictness').value, 10),
     greetByFirstName: document.getElementById('greet-first-name').checked,
     lateDeduction: document.getElementById('late-deduction').checked,
-    lateDeductionPerDay: parseInt(document.getElementById('late-deduction-per-day').value, 10) || 10,
-    inlineComments: document.getElementById('inline-comments').checked,
-    annotationsPerPage: parseFloat(document.getElementById('annotations-per-page').value) || 1
+    lateDeductionPerDay: parseInt(document.getElementById('late-deduction-per-day').value, 10) || 10
   };
 
   const btn = document.getElementById('btn-save-settings');

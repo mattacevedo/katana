@@ -612,16 +612,19 @@
 
     // ── Step 1: ensure rubric panel is visible ──────────────────────────
     const rubricFull = document.querySelector('#rubric_full');
-    const isHidden = !rubricFull ||
+    // Enhanced Canvas UI: rubric is already open if the container exists in the DOM
+    const enhancedAlreadyVisible = !!document.querySelector('[data-testid="enhanced-rubric-assessment-container"]');
+    const isHidden = !enhancedAlreadyVisible && (!rubricFull ||
       rubricFull.style.display === 'none' ||
       rubricFull.classList.contains('hidden') ||
-      window.getComputedStyle(rubricFull).display === 'none';
+      window.getComputedStyle(rubricFull).display === 'none');
 
     if (isHidden) {
       const toggle = document.querySelector(
         '.toggle_full_rubric, button.assess_submission_link, ' +
         '#rubric_assessments_list_and_edit_button_holder .edit, ' +
-        'a.toggle_rubric_assessments'
+        'a.toggle_rubric_assessments, ' +
+        '[data-testid="view-rubric-button"]'
       );
       if (toggle) {
         toggle.click();
@@ -717,6 +720,59 @@
         '| container tag/class:', container.tagName, container.className?.substring(0, 100));
       // Dump first 2000 chars of HTML for debugging
       console.warn('Katana: container HTML:', container.innerHTML.substring(0, 2000));
+      return;
+    }
+
+    // ── Step 3b: enhanced traditional rubric — fill score inputs directly ──
+    // For the enhanced Canvas UI, each criterion has a score input with
+    // data-testid="criterion-score-{criterion_id}" and rating buttons with
+    // data-testid="traditional-criterion-{criterion_id}-ratings-{index}-points"
+    // We set the score input directly (most reliable) and click the best-matching
+    // rating button (for visual feedback).
+    const isEnhancedTraditional = !!container.querySelector('[data-testid="rubric-assessment-traditional-view"]');
+    if (isEnhancedTraditional) {
+      for (const { criterion_id, points, comments } of rubricRatings) {
+        // Set score input directly
+        const scoreInput = container.querySelector(`[data-testid="criterion-score-${criterion_id}"]`);
+        if (scoreInput) {
+          setReactInputValue(scoreInput, String(points));
+          console.log(`Katana: fillRubric (enhanced) — set score input for ${criterion_id} = ${points}`);
+        }
+        // Click the rating button whose range best contains the target points
+        let ratingIdx = 0;
+        let bestDiff = Infinity;
+        let ratingEl = null;
+        while (true) {
+          const btn = container.querySelector(`[data-testid="traditional-criterion-${criterion_id}-ratings-${ratingIdx}"]`);
+          if (!btn) break;
+          const ptsEl = container.querySelector(`[data-testid="traditional-criterion-${criterion_id}-ratings-${ratingIdx}-points"]`);
+          const rangeText = ptsEl?.textContent || '';
+          const nums = [...rangeText.matchAll(/(\d+(?:\.\d+)?)/g)].map(m => parseFloat(m[1]));
+          if (nums.length >= 2) {
+            const [low, high] = [Math.min(...nums), Math.max(...nums)];
+            if (points >= low && points <= high) { ratingEl = btn; break; }
+            const diff = Math.min(Math.abs(points - low), Math.abs(points - high));
+            if (diff < bestDiff) { bestDiff = diff; ratingEl = btn; }
+          }
+          ratingIdx++;
+        }
+        if (ratingEl) {
+          ratingEl.dispatchEvent(new Event('click', { bubbles: true }));
+          await new Promise(r => setTimeout(r, 150));
+        }
+        if (comments) {
+          const toggleBtn = container.querySelector(`[data-testid="toggle-comment-${criterion_id}"]`);
+          if (toggleBtn) { toggleBtn.click(); await new Promise(r => setTimeout(r, 200)); }
+          const commentArea = container.querySelector(`textarea[data-testid*="${criterion_id}"], textarea`);
+          if (commentArea) setReactTextareaValue(commentArea, comments);
+        }
+      }
+      // Submit the enhanced rubric assessment
+      const submitBtn = container.querySelector('[data-testid="save-rubric-assessment-button"]');
+      if (submitBtn) {
+        submitBtn.click();
+        console.log('Katana: fillRubric (enhanced) — clicked Submit Assessment');
+      }
       return;
     }
 

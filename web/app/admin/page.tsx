@@ -9,6 +9,7 @@ import Link from 'next/link';
 import styles from './admin.module.css';
 import ActivityLog from './ActivityLog';
 import EscalationSettings from './EscalationSettings';
+import AddGrades from './AddGrades';
 
 const PLAN_PRICES: Record<string, number> = {
   free:   0,
@@ -61,6 +62,11 @@ export default async function AdminPage() {
     perPage: 1000,
   });
 
+  // Grade ratings
+  const { data: ratingsData = [] } = await admin
+    .from('grade_ratings')
+    .select('user_id, rating');
+
   // Admin settings (escalation emails, etc.) — table may not exist yet; ignore errors
   const { data: settingsRows, error: settingsErr } = await admin
     .from('admin_settings')
@@ -69,6 +75,18 @@ export default async function AdminPage() {
     (!settingsErr && settingsRows ? settingsRows : []).map((r: { key: string; value: string }) => [r.key, r.value])
   );
   const escalationEmails = adminSettings['escalation_emails'] ?? 'mattacevedo@gmail.com';
+
+  // ── Aggregate ratings ─────────────────────────────────────────────────────
+  const ratingsMap = new Map<string, { up: number; down: number }>();
+  for (const r of (ratingsData ?? []) as { user_id: string; rating: string }[]) {
+    const entry = ratingsMap.get(r.user_id) ?? { up: 0, down: 0 };
+    if (r.rating === 'up') entry.up++;
+    else entry.down++;
+    ratingsMap.set(r.user_id, entry);
+  }
+  const totalRatingsUp   = (ratingsData ?? []).filter((r: { rating: string }) => r.rating === 'up').length;
+  const totalRatingsDown = (ratingsData ?? []).filter((r: { rating: string }) => r.rating === 'down').length;
+  const totalRatings     = totalRatingsUp + totalRatingsDown;
 
   // ── Build unified user list ───────────────────────────────────────────────
   const profileMap = new Map((profiles ?? []).map((p: Record<string, unknown>) => [p.id as string, p]));
@@ -81,6 +99,8 @@ export default async function AdminPage() {
     gradesUsed: number;
     periodStart: string | null;
     usagePct: number;
+    thumbsUp: number;
+    thumbsDown: number;
   };
 
   const userRows: UserRow[] = authUsers.map((u) => {
@@ -96,6 +116,8 @@ export default async function AdminPage() {
       gradesUsed,
       periodStart: (profile?.period_start as string) ?? null,
       usagePct: limit > 0 ? Math.min(100, (gradesUsed / limit) * 100) : 0,
+      thumbsUp:   ratingsMap.get(u.id)?.up   ?? 0,
+      thumbsDown: ratingsMap.get(u.id)?.down ?? 0,
     };
   });
 
@@ -184,6 +206,11 @@ export default async function AdminPage() {
             <div className={styles.kpiLabel}>Est. Claude API Cost</div>
             <div className={styles.kpiValue}>{fmtUsd(estimatedApiCost)}</div>
             <div className={styles.kpiSub}>~$0.009 / grade · margin {fmtUsd(mrr - estimatedApiCost)}/mo</div>
+          </div>
+          <div className={styles.kpiCard}>
+            <div className={styles.kpiLabel}>Feedback Ratings</div>
+            <div className={styles.kpiValue}>{totalRatings > 0 ? `${Math.round((totalRatingsUp / totalRatings) * 100)}%` : '—'}</div>
+            <div className={styles.kpiSub}>👍 {fmt(totalRatingsUp)} · 👎 {fmt(totalRatingsDown)} · {fmt(totalRatings)} total</div>
           </div>
           <div className={styles.kpiCard}>
             <div className={styles.kpiLabel}>Site Traffic</div>
@@ -277,6 +304,8 @@ export default async function AdminPage() {
                   <th className={styles.num}>Limit</th>
                   <th className={styles.num}>% Used</th>
                   <th>Progress</th>
+                  <th className={styles.num}>👍</th>
+                  <th className={styles.num}>👎</th>
                   <th>Period Start</th>
                 </tr>
               </thead>
@@ -307,6 +336,8 @@ export default async function AdminPage() {
                         />
                       </div>
                     </td>
+                    <td className={styles.num}>{u.thumbsUp > 0 ? u.thumbsUp : '—'}</td>
+                    <td className={styles.num}>{u.thumbsDown > 0 ? u.thumbsDown : '—'}</td>
                     <td>{fmtDate(u.periodStart)}</td>
                   </tr>
                 ))}
@@ -347,6 +378,13 @@ export default async function AdminPage() {
               </tbody>
             </table>
           </div>
+        </section>
+
+        {/* ── Manual grade addition ───────────────────────────────────── */}
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Add Grades to Account</h2>
+          <p className={styles.sectionDesc}>Credit bonus grades to any user. Uses the same <code>add_bonus_grades</code> RPC as the add-on purchase flow.</p>
+          <AddGrades />
         </section>
 
         {/* ── Live Activity Log ───────────────────────────────────────── */}
