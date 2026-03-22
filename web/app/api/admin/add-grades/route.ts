@@ -37,12 +37,12 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
 
   // Look up user by email
-  const { data: { users }, error: lookupErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  const { data: { users: authUsers = [] }, error: lookupErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
   if (lookupErr) {
     return NextResponse.json({ error: 'Failed to look up users' }, { status: 500 });
   }
 
-  const target = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+  const target = authUsers.find((u: { id: string; email?: string }) => u.email?.toLowerCase() === email.toLowerCase());
   if (!target) {
     return NextResponse.json({ error: `No user found with email: ${email}` }, { status: 404 });
   }
