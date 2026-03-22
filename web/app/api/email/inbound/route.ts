@@ -603,12 +603,6 @@ export async function POST(req: NextRequest) {
     } catch { /* malformed base64 — fall through */ }
   }
 
-  // Fallback: query param (deprecated — update Postmark URL to use Basic Auth)
-  if (!authenticated) {
-    const secret = req.nextUrl.searchParams.get('secret');
-    if (secret && secret === expectedSecret) authenticated = true;
-  }
-
   if (!authenticated) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   }

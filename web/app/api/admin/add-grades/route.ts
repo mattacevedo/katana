@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '../../../../lib/supabase/server';
 import { createAdminClient } from '../../../../lib/supabase/admin';
+import { logActivity } from '../../../../lib/logActivity';
 
 async function verifyAdmin() {
   const serverSupabase = await createServerClient();
@@ -20,6 +21,13 @@ async function verifyAdmin() {
 export async function POST(req: NextRequest) {
   if (!await verifyAdmin()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // CSRF: only allow requests from the same origin (admin dashboard)
+  const origin = req.headers.get('origin');
+  const host = req.headers.get('host');
+  if (!origin || !host || !origin.includes(host)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   let body: { email?: string; amount?: number };
@@ -44,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   const target = authUsers.find((u: { id: string; email?: string }) => u.email?.toLowerCase() === email.toLowerCase());
   if (!target) {
-    return NextResponse.json({ error: `No user found with email: ${email}` }, { status: 404 });
+    return NextResponse.json({ error: 'No user found with that email.' }, { status: 404 });
   }
 
   const { error: rpcErr } = await admin.rpc('add_bonus_grades', {
@@ -53,8 +61,11 @@ export async function POST(req: NextRequest) {
   });
 
   if (rpcErr) {
-    return NextResponse.json({ error: rpcErr.message }, { status: 500 });
+    console.error('admin/add-grades: RPC error', rpcErr.message);
+    return NextResponse.json({ error: 'Failed to credit grades.' }, { status: 500 });
   }
+
+  void logActivity('admin_bonus_grade', `Admin credited +${amount} bonus grades`, { email: target.email, grades: amount });
 
   return NextResponse.json({ ok: true, userId: target.id, email: target.email, amount });
 }

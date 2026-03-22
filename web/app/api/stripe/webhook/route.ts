@@ -97,7 +97,9 @@ export async function POST(req: NextRequest) {
         // ── One-time add-on pack purchase ─────────────────────────────────
         if (session.mode === 'payment') {
           const userId = session.metadata?.supabase_user_id;
-          const addonGrades = parseInt(session.metadata?.addon_grades ?? '100', 10);
+          // Validate against allowlist — only 100-grade packs are sold
+          const rawAddonGrades = parseInt(session.metadata?.addon_grades ?? '100', 10);
+          const addonGrades = rawAddonGrades === 100 ? 100 : 100; // always 100 regardless of metadata
 
           if (!isValidUuid(userId)) {
             console.error('webhook: one-time payment — missing or invalid supabase_user_id in metadata');

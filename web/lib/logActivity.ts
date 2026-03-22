@@ -50,7 +50,8 @@ export type ActivityEventType =
   | 'cancel'
   | 'reactivate'
   | 'payment_failed'
-  | 'addon_purchase';
+  | 'addon_purchase'
+  | 'admin_bonus_grade';
 
 export async function logActivity(
   eventType: ActivityEventType,

@@ -94,10 +94,15 @@ export async function POST(req: NextRequest) {
 
 // CORS preflight — extension needs this
 export async function OPTIONS() {
+  const extensionId = process.env.NEXT_PUBLIC_EXTENSION_ID;
+  // Guard: if extension ID is not configured, refuse rather than emit a wildcard header
+  if (!extensionId || extensionId.length < 32) {
+    return new NextResponse(null, { status: 403 });
+  }
   return new NextResponse(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin':  `chrome-extension://${process.env.NEXT_PUBLIC_EXTENSION_ID || ''}`,
+      'Access-Control-Allow-Origin':  `chrome-extension://${extensionId}`,
       'Access-Control-Allow-Methods': 'POST,OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type,Authorization',
     },
