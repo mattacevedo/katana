@@ -184,6 +184,10 @@ export async function POST(req: NextRequest) {
     }, 402);
   }
 
+  // Determine which quota bucket was consumed before we call Claude.
+  // increment_grade_count_v2 uses plan quota first; bonus grades are the fallback.
+  const usedBonusGrade = (profile?.grades_this_period ?? 0) >= limit;
+
   // 5. Build prompts and call Claude
   const { systemPrompt, userMessage } = buildPrompts(submissionData, settings);
   const fileAttachments = attachments; // already validated above
@@ -193,21 +197,11 @@ export async function POST(req: NextRequest) {
     result = await callClaude(systemPrompt, userMessage, fileAttachments, settings.model, settings.inlineComments, submissionData.pageCount);
   } catch (err: unknown) {
     // Roll back the quota slot we just claimed — Claude failed, grade not consumed.
-    // increment_grade_count_v2 uses plan quota first, then bonus grades.
-    // If plan quota was already full, bonus grades were consumed instead.
-    if ((profile?.grades_this_period ?? 0) >= limit) {
-      // Bonus grade was used — restore it
-      await supabase
-        .from('profiles')
-        .update({ bonus_grades: bonusGrades + 1 })
-        .eq('id', user.id);
-    } else {
-      // Plan quota slot was used — restore it
-      await supabase
-        .from('profiles')
-        .update({ grades_this_period: (profile?.grades_this_period ?? 0) })
-        .eq('id', user.id);
-    }
+    // Uses an atomic RPC (relative ±1) to avoid corrupting concurrent requests.
+    await supabase.rpc('rollback_grade_count_v2', {
+      p_user_id:    user.id,
+      p_used_bonus: usedBonusGrade,
+    });
     console.error('Katana /api/grade: Claude error', err);
     return json({ error: 'Failed to grade the submission. Please try again.' }, 500);
   }
